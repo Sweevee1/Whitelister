@@ -791,9 +791,14 @@
                         row.innerHTML = `
                             ${dot}
                             <span style="flex:1;font-size:0.85rem"><strong>${escapeHtml(inst.name)}</strong> <span style="color:var(--text-muted);font-size:0.8rem">${escapeHtml(inst.module)}</span></span>
-                            <code style="font-size:0.75rem;color:var(--text-muted)">${escapeHtml(inst.url)}</code>
-                            <button type="button" class="btn btn-ghost" style="padding:0.2rem 0.6rem;font-size:0.8rem"
-                                    onclick="selectAmpInstance(${JSON.stringify(inst.instance_id)}, ${JSON.stringify(inst.name)})">Use</button>`;
+                            <code style="font-size:0.75rem;color:var(--text-muted)">${escapeHtml(inst.url)}</code>`;
+                        const useBtn = document.createElement('button');
+                        useBtn.type = 'button';
+                        useBtn.className = 'btn btn-ghost';
+                        useBtn.style.cssText = 'padding:0.2rem 0.6rem;font-size:0.8rem';
+                        useBtn.textContent = 'Use';
+                        useBtn.addEventListener('click', () => selectAmpInstance(inst.instance_id, inst.name));
+                        row.appendChild(useBtn);
                     }
                     list.appendChild(row);
                 });
