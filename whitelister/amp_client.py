@@ -38,7 +38,7 @@ class AMPClient:
                     "token": "",
                     "rememberMe": False,
                 },
-                timeout=10,
+                timeout=5,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -70,7 +70,7 @@ class AMPClient:
                     "token": "",
                     "rememberMe": False,
                 },
-                timeout=10,
+                timeout=5,
             )
             resp.raise_for_status()
             data = resp.json()

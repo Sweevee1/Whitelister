@@ -768,23 +768,6 @@
 
         if (TWITCH_STATUS === 'connected') loadRewards();
 
-        // ── AMP status ───────────────────────────────────────────────────────
-        async function checkAmpStatus() {
-            try {
-                const res  = await fetch('/amp/status');
-                const data = await res.json();
-                const label = data.status === 'connected'  ? (data.module ? `Connected · ${data.module}` : 'Connected')
-                    : data.status === 'wrong_url'          ? 'ADS panel — click Load to pick instance'
-                    : data.reason === 'auth_failed'        ? 'Wrong credentials'
-                    : data.reason === 'command_error'      ? 'AMP error — use direct instance URL'
-                    : 'Unreachable';
-                setBadge('ampBadge', data.status === 'connected' ? 'connected' : 'error', label);
-                if (data.status === 'wrong_url') showToast(data.message, 'error');
-            } catch {
-                setBadge('ampBadge', 'error', 'Unreachable');
-            }
-        }
-
         async function loadAmpInstances(btn) {
             btn.disabled = true; btn.textContent = 'Loading…';
             try {
@@ -849,6 +832,27 @@
             } catch {}
         }
 
+        let twitchPollTimer = null;
+        let ampCheckInFlight = false;
+        async function checkAmpStatus() {
+            if (ampCheckInFlight) return;
+            ampCheckInFlight = true;
+            try {
+                const res  = await fetch('/amp/status');
+                const data = await res.json();
+                const label = data.status === 'connected'  ? (data.module ? `Connected · ${data.module}` : 'Connected')
+                    : data.status === 'wrong_url'          ? 'ADS panel — click Load to pick instance'
+                    : data.reason === 'auth_failed'        ? 'Wrong credentials'
+                    : data.reason === 'command_error'      ? 'AMP error — use direct instance URL'
+                    : 'Unreachable';
+                setBadge('ampBadge', data.status === 'connected' ? 'connected' : 'error', label);
+                if (data.status === 'wrong_url') showToast(data.message, 'error');
+            } catch {
+                setBadge('ampBadge', 'error', 'Unreachable');
+            } finally {
+                ampCheckInFlight = false;
+            }
+        }
         let twitchPollTimer = null;
         function onSettingsTabOpen() {
             checkAmpStatus();
