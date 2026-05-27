@@ -389,6 +389,7 @@ def create_app(config_path: str = None) -> Flask:
         client_id = data.get("client_id", "").strip()
         client_secret = data.get("client_secret", "").strip()
         channel_name = data.get("channel_name", "").strip()
+        redirect_uri = data.get("redirect_uri", "").strip() or _twitch_redirect_uri()
 
         if not client_id or not client_secret or not channel_name:
             return jsonify({
@@ -402,10 +403,11 @@ def create_app(config_path: str = None) -> Flask:
         cfg["twitch"]["client_id"] = client_id
         cfg["twitch"]["client_secret"] = client_secret
         cfg["twitch"]["channel_name"] = channel_name
+        cfg["twitch"]["redirect_uri"] = redirect_uri
         with open(config_path, "w") as f:
             yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
 
-        auth_url = build_auth_url(client_id, _twitch_redirect_uri())
+        auth_url = build_auth_url(client_id, redirect_uri)
         return jsonify({"auth_url": auth_url})
 
     @app.route("/twitch/callback")
@@ -425,12 +427,13 @@ def create_app(config_path: str = None) -> Flask:
             cfg = yaml.safe_load(f)
         twitch_cfg = cfg.get("twitch", {})
 
+        redirect_uri = twitch_cfg.get("redirect_uri") or _twitch_redirect_uri()
         try:
             tokens = exchange_code(
                 twitch_cfg["client_id"],
                 twitch_cfg["client_secret"],
                 code,
-                _twitch_redirect_uri(),
+                redirect_uri,
             )
             broadcaster_id = get_broadcaster_id(
                 twitch_cfg["client_id"],

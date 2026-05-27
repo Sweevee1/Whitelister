@@ -957,7 +957,8 @@
                 const res  = await fetch('/twitch/auth', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_id: clientId, client_secret: clientSecret,
-                                          channel_name: channelName }),
+                                          channel_name: channelName,
+                                          redirect_uri: window.location.origin + '/twitch/callback' }),
                 });
                 const data = await res.json();
                 if (res.ok) { window.location.href = data.auth_url; }
