@@ -40,25 +40,28 @@ Viewer redeems channel points reward
 
 ## Deployment (Unraid)
 
-**1. Install the Compose Manager plugin:**
+The Docker image is built and published automatically to GitHub Container Registry on every push to this repo.
 
-In the Unraid web UI, go to **Apps** and search for **Compose Manager**. Install it. This adds a **Compose** tab under **Docker**.
+**1. Create the config file:**
 
-**2. Add the stack:**
-
-Go to **Docker → Compose** and click **Add Stack**. Give it a name (e.g. `whitelister`) and set the GitHub URL to `https://github.com/Sweevee1/Whitelister` — Compose Manager will pull the `docker-compose.yml` from the repo.
-
-**3. Set up the config file:**
-
-In the Unraid web UI, go to **Files** and navigate to `/mnt/user/appdata/whitelister/`. Create a new file called `config.yaml` and paste in the contents from the [config.yaml](config.yaml) in this repo. At minimum update:
+In the Unraid web UI, go to **Files** and navigate to `/mnt/user/appdata/`. Create a new folder called `whitelister`, then inside it create a file called `config.yaml`. Paste in the contents from [config.yaml](config.yaml) in this repo and update at minimum:
 - `amp.url` — your AMP instance URL for the Minecraft server (e.g. `http://192.168.1.50:8080`)
 - `amp.username` / `amp.password` — your AMP credentials
 
-**4. Start the container:**
+**2. Add the container:**
 
-Back in **Docker → Compose**, start the `whitelister` stack. You can check logs from the same UI.
+Go to **Docker** and click **Add Container**. Fill in:
 
-**5. Connect Twitch via the dashboard:**
+| Field | Value |
+|-------|-------|
+| Name | `whitelister` |
+| Repository | `ghcr.io/sweevee1/whitelister:latest` |
+| Port | Host: `8765` → Container: `8765` |
+| Volume | Host: `/mnt/user/appdata/whitelister` → Container: `/config` |
+
+Click **Apply**. Unraid will pull the image and start the container.
+
+**3. Connect Twitch via the dashboard:**
 
 Open `http://<Unraid-IP>:8765` in your browser and follow the Twitch setup flow. You'll need your Twitch app's client ID and secret — set the OAuth Redirect URL in your Twitch app to `http://<Unraid-IP>:8765/twitch/callback`.
 
