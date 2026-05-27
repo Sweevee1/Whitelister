@@ -203,7 +203,24 @@ class AMPClient:
                     })
         return instances
 
+    def _assert_running(self) -> None:
+        """Raise AMPCommandError if the Minecraft instance is not in the Running state."""
+        try:
+            data = self.get_status()
+        except (AMPAuthError, AMPCommandError):
+            raise
+        except Exception as e:
+            raise AMPCommandError(f"Failed to check instance state: {e}") from e
+        state = data.get("State")
+        # AMP ApplicationState: 20 = Running (server is up and processing commands).
+        # Only block if we got a definitive non-running state; if State is absent we proceed.
+        if state is not None and state != 20:
+            raise AMPCommandError(
+                f"Minecraft instance is not running (state={state}); whitelist command skipped"
+            )
+
     def whitelist_add(self, username: str) -> None:
+        self._assert_running()
         self.send_console_command(f"whitelist add {username}")
 
     def whitelist_remove(self, username: str) -> None:
