@@ -524,8 +524,15 @@
                             <span>↗</span>
                             <span>
                                 Register a free app at <strong>dev.twitch.tv/console/apps</strong> to get a Client ID and Secret.
-                                Set the OAuth Redirect URL to: <code id="redirectUriDisplay"></code>
+                                The app serves HTTPS automatically — accept the browser's certificate warning once, then copy the redirect URL below into your Twitch app.
                             </span>
+                        </div>
+                        <div class="field">
+                            <label for="s-twitch-redirect">OAuth Redirect URL</label>
+                            <input type="text" id="s-twitch-redirect" autocomplete="off" spellcheck="false"
+                                   placeholder="https://192.168.x.x:8765/twitch/callback"
+                                   value="{{ config.twitch.redirect_uri if config.twitch is defined and config.twitch.redirect_uri is defined else '' }}">
+                            <div class="field-hint">Paste this URL exactly into the Twitch app's OAuth Redirect URLs field. Save settings first to persist it.</div>
                         </div>
                         <div class="field">
                             <label for="s-twitch-id">Client ID</label>
@@ -659,9 +666,14 @@
             el.querySelector('span:last-child').textContent = label;
         }
 
-        // ── Redirect URI display ─────────────────────────────────────────────
-        document.getElementById('redirectUriDisplay').textContent =
-            window.location.origin + '/twitch/callback';
+        // ── Redirect URI default ─────────────────────────────────────────────
+        const redirectInput = document.getElementById('s-twitch-redirect');
+        if (!redirectInput.value) {
+            // App serves HTTPS — build the redirect URI using https:// regardless of
+            // how the dashboard is currently accessed (HTTP during local dev).
+            const httpsOrigin = 'https://' + window.location.host;
+            redirectInput.value = httpsOrigin + '/twitch/callback';
+        }
 
         // ── Countdown ────────────────────────────────────────────────────────
         function formatCountdown(s) {
@@ -958,7 +970,7 @@
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_id: clientId, client_secret: clientSecret,
                                           channel_name: channelName,
-                                          redirect_uri: window.location.origin + '/twitch/callback' }),
+                                          redirect_uri: document.getElementById('s-twitch-redirect').value.trim() }),
                 });
                 const data = await res.json();
                 if (!res.ok) {
@@ -1030,6 +1042,7 @@
                     client_secret: document.getElementById('s-twitch-secret').value.trim(),
                     channel_name:  document.getElementById('s-twitch-channel').value.trim(),
                     reward_id:     document.getElementById('s-reward').value,
+                    redirect_uri:  document.getElementById('s-twitch-redirect').value.trim(),
                 },
             };
             try {

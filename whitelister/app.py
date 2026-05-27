@@ -290,7 +290,7 @@ def create_app(config_path: str = None) -> Flask:
         # Twitch: only update user-visible fields; preserve auth tokens
         if "twitch" in data:
             existing.setdefault("twitch", {})
-            for field in ("client_id", "client_secret", "channel_name", "reward_id"):
+            for field in ("client_id", "client_secret", "channel_name", "reward_id", "redirect_uri"):
                 if field in data["twitch"]:
                     existing["twitch"][field] = data["twitch"][field]
             if twitch_state["client"]:
