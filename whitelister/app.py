@@ -412,16 +412,27 @@ def create_app(config_path: str = None) -> Flask:
 
     @app.route("/twitch/callback")
     def twitch_callback():
-        from urllib.parse import quote as _quote
+        def _popup_html(msg_type: str, error: str = "") -> str:
+            import json as _json
+            payload = _json.dumps({"type": msg_type, "error": error})
+            return f"""<!doctype html><html><body><script>
+if (window.opener) {{
+    window.opener.postMessage({payload}, '*');
+    window.close();
+}} else {{
+    window.location = error ? '/?twitch=error&msg=' + encodeURIComponent({_json.dumps(error)}) : '/?twitch=connected';
+}}
+</script><p>{'Error: ' + error if error else 'Authorised — closing…'}</p></body></html>"""
+
         error = request.args.get("error")
         if error:
             desc = request.args.get("error_description", error)
             logger.error("Twitch OAuth error: %s", desc)
-            return redirect(f"/?twitch=error&msg={_quote(desc)}")
+            return _popup_html("twitch_auth_error", desc)
 
         code = request.args.get("code")
         if not code:
-            return redirect("/?twitch=error&msg=No+code+returned+by+Twitch")
+            return _popup_html("twitch_auth_error", "No code returned by Twitch")
 
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
@@ -442,7 +453,7 @@ def create_app(config_path: str = None) -> Flask:
             )
         except Exception as e:
             logger.error("Twitch OAuth callback error: %s", e)
-            return redirect(f"/?twitch=error&msg={_quote(str(e)[:200])}")
+            return _popup_html("twitch_auth_error", str(e)[:200])
 
         cfg["twitch"]["access_token"] = tokens["access_token"]
         cfg["twitch"]["refresh_token"] = tokens["refresh_token"]
@@ -451,7 +462,7 @@ def create_app(config_path: str = None) -> Flask:
             yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
 
         _start_twitch_client(cfg["twitch"])
-        return redirect("/?twitch=connected")
+        return _popup_html("twitch_auth_success")
 
     @app.route("/twitch/status")
     def twitch_status():

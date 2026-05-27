@@ -952,7 +952,7 @@
                 return;
             }
             const btn = document.getElementById('authorizeBtn');
-            btn.disabled = true; btn.textContent = 'Redirecting…';
+            btn.disabled = true; btn.textContent = 'Authorizing…';
             try {
                 const res  = await fetch('/twitch/auth', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -961,11 +961,31 @@
                                           redirect_uri: window.location.origin + '/twitch/callback' }),
                 });
                 const data = await res.json();
-                if (res.ok) { window.location.href = data.auth_url; }
-                else {
+                if (!res.ok) {
                     showToast(data.message || 'Error', 'error');
                     btn.disabled = false; btn.textContent = 'Authorize with Twitch';
+                    return;
                 }
+                const popup = window.open(data.auth_url, 'twitch-auth',
+                    'width=520,height=750,left=200,top=100');
+                const finish = () => {
+                    clearInterval(closedCheck);
+                    window.removeEventListener('message', onMessage);
+                    btn.disabled = false; btn.textContent = 'Authorize with Twitch';
+                    checkTwitchStatus();
+                };
+                const onMessage = (e) => {
+                    if (e.data?.type === 'twitch_auth_success') {
+                        showToast('Twitch connected!', 'success');
+                        finish();
+                        loadRewards();
+                    } else if (e.data?.type === 'twitch_auth_error') {
+                        showToast('Twitch auth failed: ' + (e.data.error || 'unknown error'), 'error');
+                        finish();
+                    }
+                };
+                window.addEventListener('message', onMessage);
+                const closedCheck = setInterval(() => { if (popup?.closed) finish(); }, 600);
             } catch {
                 showToast('Network error', 'error');
                 btn.disabled = false; btn.textContent = 'Authorize with Twitch';
