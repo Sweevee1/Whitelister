@@ -40,32 +40,25 @@ Viewer redeems channel points reward
 
 ## Deployment (Unraid)
 
-**1. Clone the repo and set up your config:**
+**1. Install the Compose Manager plugin:**
 
-```bash
-git clone https://github.com/Sweevee1/Whitelister.git /mnt/user/appdata/whitelister-app
-mkdir -p /mnt/user/appdata/whitelister
-cp /mnt/user/appdata/whitelister-app/config.yaml /mnt/user/appdata/whitelister/config.yaml
-```
+In the Unraid web UI, go to **Apps** and search for **Compose Manager**. Install it. This adds a **Compose** tab under **Docker**.
 
-Edit `/mnt/user/appdata/whitelister/config.yaml` — at minimum set:
+**2. Add the stack:**
+
+Go to **Docker → Compose** and click **Add Stack**. Give it a name (e.g. `whitelister`) and set the GitHub URL to `https://github.com/Sweevee1/Whitelister` — Compose Manager will pull the `docker-compose.yml` from the repo.
+
+**3. Set up the config file:**
+
+In the Unraid web UI, go to **Files** and navigate to `/mnt/user/appdata/whitelister/`. Create a new file called `config.yaml` and paste in the contents from the [config.yaml](config.yaml) in this repo. At minimum update:
 - `amp.url` — your AMP instance URL for the Minecraft server (e.g. `http://192.168.1.50:8080`)
 - `amp.username` / `amp.password` — your AMP credentials
 
-**2. Build and start the container:**
+**4. Start the container:**
 
-```bash
-cd /mnt/user/appdata/whitelister-app
-docker compose up -d --build
-```
+Back in **Docker → Compose**, start the `whitelister` stack. You can check logs from the same UI.
 
-Check it's running:
-```bash
-docker compose logs -f
-curl http://localhost:8765/health
-```
-
-**3. Connect Twitch via the dashboard:**
+**5. Connect Twitch via the dashboard:**
 
 Open `http://<Unraid-IP>:8765` in your browser and follow the Twitch setup flow. You'll need your Twitch app's client ID and secret — set the OAuth Redirect URL in your Twitch app to `http://<Unraid-IP>:8765/twitch/callback`.
 
