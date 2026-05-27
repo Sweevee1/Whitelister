@@ -410,15 +410,16 @@ def create_app(config_path: str = None) -> Flask:
 
     @app.route("/twitch/callback")
     def twitch_callback():
+        from urllib.parse import quote as _quote
         error = request.args.get("error")
         if error:
             desc = request.args.get("error_description", error)
             logger.error("Twitch OAuth error: %s", desc)
-            return redirect("/?twitch=error")
+            return redirect(f"/?twitch=error&msg={_quote(desc)}")
 
         code = request.args.get("code")
         if not code:
-            return redirect("/?twitch=error")
+            return redirect("/?twitch=error&msg=No+code+returned+by+Twitch")
 
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
@@ -438,7 +439,7 @@ def create_app(config_path: str = None) -> Flask:
             )
         except Exception as e:
             logger.error("Twitch OAuth callback error: %s", e)
-            return redirect("/?twitch=error")
+            return redirect(f"/?twitch=error&msg={_quote(str(e)[:200])}")
 
         cfg["twitch"]["access_token"] = tokens["access_token"]
         cfg["twitch"]["refresh_token"] = tokens["refresh_token"]

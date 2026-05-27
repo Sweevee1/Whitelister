@@ -759,7 +759,8 @@
             history.replaceState({}, '', '/');
             if (TWITCH_STATUS === 'connected') loadRewards();
         } else if (params.get('twitch') === 'error') {
-            showToast('Twitch authorisation failed', 'error');
+            const errMsg = params.get('msg') ? `Twitch auth failed: ${params.get('msg')}` : 'Twitch authorisation failed';
+            showToast(errMsg, 'error');
             activateTab('settings');
             stopPlayerPolling();
             onSettingsTabOpen();
