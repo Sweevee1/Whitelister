@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Whitelist Manager</title>
+    <style>
+        :root {
+            --bg:           #1a2035;
+            --surface:      #1e2740;
+            --surface-alt:  #232f4a;
+            --border:       #2d3d5c;
+            --accent:       #3d8fe0;
+            --accent-dark:  #2d6db0;
+            --accent-dim:   #1b3a5c;
+            --text:         #c8d4ec;
+            --text-muted:   #6879a0;
+            --success:      #2ecc71;
+            --warning:      #e8a020;
+            --danger:       #e05050;
+            --danger-dim:   #3a1f1f;
+            --twitch:       #9147ff;
+            --twitch-dark:  #6f34c2;
+            --twitch-dim:   #2a1a4a;
+            --radius:       6px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { font-size: 16px; }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Header ── */
+        header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.9rem 1.25rem 0;
+        }
+        .logo { display: flex; align-items: center; gap: 0.5rem; }
+        .logo-icon {
+            width: 28px; height: 28px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.9rem; flex-shrink: 0;
+        }
+        h1 { font-size: 1rem; font-weight: 600; color: #fff; }
+        .subtitle { font-size: 0.75rem; color: var(--text-muted); margin-top: 1px; }
+
+        .twitch-pill {
+            display: flex; align-items: center; gap: 0.35rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.75rem; font-weight: 500;
+            background: var(--twitch-dim);
+            color: #c9a7ff;
+            border: 1px solid #4a2a7a;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .twitch-pill.connected { background: var(--twitch-dim); color: #c9a7ff; border-color: #6030a0; }
+        .twitch-pill.disconnected, .twitch-pill.error { background: var(--surface-alt); color: var(--text-muted); border-color: var(--border); }
+        .twitch-pill.reconnecting { background: var(--surface-alt); color: var(--warning); border-color: #4a3010; }
+        .pill-dot {
+            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+            background: currentColor;
+        }
+        .twitch-pill.connected .pill-dot { background: var(--success); }
+        .twitch-pill.reconnecting .pill-dot { background: var(--warning); animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+
+        nav { display: flex; padding: 0 1.25rem; margin-top: 0.6rem; gap: 0.25rem; }
+        .tab {
+            padding: 0.55rem 1rem;
+            background: transparent; border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            font-size: 0.875rem; font-weight: 500; font-family: inherit;
+            cursor: pointer;
+            transition: color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+        }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab:hover:not(.active) { color: var(--text); }
+
+        /* ── Main ── */
+        main { padding: 1.25rem; max-width: 640px; margin: 0 auto; }
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        /* ── Add form ── */
+        .add-form { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+        .add-form input { flex: 1; min-width: 0; }
+
+        /* ── Inputs ── */
+        input[type="text"],
+        input[type="url"],
+        input[type="password"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 0.6rem 0.8rem;
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text);
+            font-size: 0.9rem; font-family: inherit;
+            transition: border-color 0.15s;
+            appearance: none; -webkit-appearance: none;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--accent); }
+        input::placeholder { color: var(--text-muted); }
+        select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236879a0' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            padding-right: 2rem;
+        }
+        input[type="number"] { -moz-appearance: textfield; }
+        input[type="number"]::-webkit-inner-spin-button { display: none; }
+        input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+            padding: 0.6rem 1.1rem;
+            border: none; border-radius: var(--radius);
+            font-size: 0.875rem; font-weight: 500; font-family: inherit;
+            cursor: pointer; transition: background 0.15s, opacity 0.15s;
+            white-space: nowrap;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-dark); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-danger {
+            background: transparent; border: 1px solid var(--danger-dim);
+            color: var(--danger); padding: 0.35rem 0.7rem; font-size: 0.8rem;
+        }
+        .btn-danger:hover { background: var(--danger-dim); }
+        .btn-twitch { background: var(--twitch); color: #fff; }
+        .btn-twitch:hover { background: var(--twitch-dark); }
+        .btn-twitch:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-ghost {
+            background: transparent; border: 1px solid var(--border);
+            color: var(--text-muted); padding: 0.5rem 0.9rem; font-size: 0.85rem;
+        }
+        .btn-ghost:hover { border-color: var(--text-muted); color: var(--text); }
+        .btn-save {
+            background: var(--accent); color: #fff;
+            width: 100%; padding: 0.75rem; font-size: 0.95rem; margin-top: 0.5rem;
+        }
+        .btn-save:hover { background: var(--accent-dark); }
+        .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Player list ── */
+        .player-count { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+        .player-count span { color: var(--accent); font-weight: 600; }
+        .player-list { display: flex; flex-direction: column; gap: 0.5rem; }
+        .player-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 0.75rem 1rem;
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+        .player-info { flex: 1; min-width: 0; }
+        .player-name {
+            font-weight: 600; color: #fff; font-size: 0.95rem;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .player-meta {
+            display: flex; align-items: center; gap: 0.5rem;
+            margin-top: 0.2rem; font-size: 0.78rem; color: var(--text-muted);
+        }
+        .countdown { font-variant-numeric: tabular-nums; font-weight: 500; color: var(--success); }
+        .countdown.warning { color: var(--warning); }
+        .countdown.expiring { color: var(--danger); }
+        .sep { color: var(--border); }
+        .empty-state {
+            text-align: center; padding: 3rem 1rem; color: var(--text-muted);
+            font-size: 0.9rem; background: var(--surface);
+            border: 1px solid var(--border); border-radius: var(--radius);
+        }
+        .empty-state p:first-child { font-size: 1.5rem; margin-bottom: 0.5rem; }
+
+        /* ── Settings ── */
+        .settings-section {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); margin-bottom: 1rem; overflow: hidden;
+        }
+        .settings-section-title {
+            font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.07em; color: var(--text-muted);
+            padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+            background: var(--surface-alt);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            padding: 0.2rem 0.55rem; border-radius: 20px;
+            font-size: 0.72rem; font-weight: 600;
+            text-transform: none; letter-spacing: 0;
+            transition: background 0.2s, color 0.2s;
+        }
+        .status-badge .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+        .status-badge.checking { color: var(--text-muted); }
+        .status-badge.checking .dot { background: var(--text-muted); opacity: 0.4; animation: pulse 1s infinite; }
+        .status-badge.connected { background: rgba(46,204,113,0.12); color: #2ecc71; border: 1px solid rgba(46,204,113,0.25); }
+        .status-badge.connected .dot { background: var(--success); }
+        .status-badge.error { background: rgba(224,80,80,0.12); color: var(--danger); border: 1px solid rgba(224,80,80,0.25); }
+        .status-badge.error .dot { background: var(--danger); }
+        .status-badge.disconnected { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); }
+        .status-badge.disconnected .dot { background: var(--text-muted); opacity: 0.4; }
+        .status-badge.reconnecting { background: rgba(232,160,32,0.12); color: var(--warning); border: 1px solid rgba(232,160,32,0.25); }
+        .status-badge.reconnecting .dot { background: var(--warning); animation: pulse 1s infinite; }
+        .settings-body { padding: 1rem; display: flex; flex-direction: column; gap: 0.85rem; }
+        .field label {
+            display: block; font-size: 0.8rem; font-weight: 500;
+            color: var(--text-muted); margin-bottom: 0.35rem;
+        }
+        .field-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem; opacity: 0.8; }
+        .field-hint code {
+            font-family: 'SF Mono', Consolas, monospace; font-size: 0.85em;
+            background: var(--bg); padding: 0.1em 0.3em; border-radius: 3px;
+        }
+
+        .input-group { display: flex; gap: 0; align-items: stretch; }
+        .input-group input, .input-group select { flex: 1; border-radius: var(--radius) 0 0 var(--radius); }
+        .input-suffix {
+            display: flex; align-items: center; padding: 0 0.75rem;
+            background: var(--surface-alt); border: 1px solid var(--border); border-left: none;
+            border-radius: 0 var(--radius) var(--radius) 0;
+            color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;
+        }
+        .input-with-btn { display: flex; gap: 0.5rem; align-items: flex-start; }
+        .input-with-btn select, .input-with-btn input { flex: 1; }
+
+        .password-wrap { position: relative; }
+        .password-wrap input { padding-right: 3rem; }
+        .btn-show-pass {
+            position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%);
+            background: none; border: none; color: var(--text-muted);
+            cursor: pointer; font-size: 0.8rem; padding: 0.25rem 0.4rem; font-family: inherit;
+        }
+        .btn-show-pass:hover { color: var(--text); }
+
+        .readonly-field {
+            padding: 0.6rem 0.8rem; background: var(--bg);
+            border: 1px solid var(--border); border-radius: var(--radius);
+            color: var(--text-muted); font-size: 0.85rem;
+            font-family: 'SF Mono', Consolas, monospace; word-break: break-all;
+        }
+
+        .notice {
+            display: flex; align-items: flex-start; gap: 0.5rem;
+            padding: 0.7rem 0.9rem; border-radius: var(--radius);
+            font-size: 0.8rem; margin-bottom: 1rem;
+        }
+        .notice-blue { background: var(--accent-dim); border: 1px solid #2a4a6a; color: #8ab4d4; }
+        .notice-twitch { background: var(--twitch-dim); border: 1px solid #4a2a7a; color: #c9a7ff; }
+
+        .twitch-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+        /* ── Toast ── */
+        .toast {
+            position: fixed;
+            bottom: calc(1.25rem + env(safe-area-inset-bottom));
+            left: 50%; transform: translateX(-50%) translateY(12px);
+            padding: 0.65rem 1.25rem; border-radius: 20px;
+            font-size: 0.875rem; font-weight: 500;
+            opacity: 0; transition: opacity 0.2s, transform 0.2s;
+            pointer-events: none; white-space: nowrap; z-index: 100;
+        }
+        .toast.success { background: var(--success); color: #0a2010; }
+        .toast.error   { background: var(--danger);  color: #fff; }
+        .toast.info    { background: var(--accent);  color: #fff; }
+        .toast.show    { opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-top">
+            <div class="logo">
+                <div class="logo-icon">⛏</div>
+                <div>
+                    <h1>Whitelist Manager</h1>
+                    <div class="subtitle">Minecraft · Twitch</div>
+                </div>
+            </div>
+            <div class="twitch-pill {{ twitch_status }}" id="twitchPill">
+                <div class="pill-dot"></div>
+                <span id="twitchPillLabel">
+                    {% if twitch_status == 'connected' %}
+                        {{ config.twitch.channel_name if config.twitch is defined else 'Twitch' }}
+                    {% elif twitch_status == 'reconnecting' %}
+                        Reconnecting…
+                    {% elif twitch_status == 'error' %}
+                        Twitch error
+                    {% else %}
+                        Twitch off
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+        <nav>
+            <button class="tab active" data-tab="players">Players</button>
+            <button class="tab" data-tab="settings">Settings</button>
+        </nav>
+    </header>
+
+    <main>
+        <!-- ── Players panel ── -->
+        <div class="panel active" id="panel-players">
+            <form class="add-form" id="addForm">
+                <input type="text" id="usernameInput" placeholder="Minecraft username"
+                       maxlength="16" autocomplete="off" spellcheck="false"
+                       inputmode="text" autocapitalize="none">
+                <button type="submit" class="btn btn-primary" id="addBtn">
+                    Add ({{ duration_hours }}h)
+                </button>
+            </form>
+
+            <p class="player-count">
+                <span id="playerCount">{{ players | length }}</span>
+                player{{ 's' if players | length != 1 else '' }} whitelisted
+            </p>
+
+            <div class="player-list" id="playerList">
+                {% if players %}
+                    {% for p in players %}
+                    <div class="player-card" id="card-{{ p.username }}">
+                        <div class="player-info">
+                            <div class="player-name">{{ p.username }}</div>
+                            <div class="player-meta">
+                                <span class="countdown" data-expires="{{ p.expires_at }}"></span>
+                                <span class="sep">·</span>
+                                <span>expires {{ p.expires_str }}</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-danger"
+                                onclick="removePlayer('{{ p.username }}')">Remove</button>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state" id="emptyState">
+                        <p>🎮</p>
+                        <p>No players currently whitelisted</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ── Settings panel ── -->
+        <div class="panel" id="panel-settings">
+            <div class="notice notice-blue">
+                <span>ℹ</span>
+                <span>AMP credential, interval and Twitch changes require a service restart to fully take effect.</span>
+            </div>
+
+            <form id="settingsForm">
+                <!-- AMP -->
+                <div class="settings-section">
+                    <div class="settings-section-title">
+                        <span>AMP Connection</span>
+                        <span class="status-badge checking" id="ampBadge">
+                            <span class="dot"></span><span>Checking…</span>
+                        </span>
+                    </div>
+                    <div class="settings-body">
+                        <div class="field">
+                            <label for="s-amp-url">Panel URL</label>
+                            <input type="url" id="s-amp-url" placeholder="http://192.168.1.x:8080"
+                                   value="{{ config.amp.url }}">
+                        </div>
+                        <div class="field">
+                            <label for="s-amp-user">Username</label>
+                            <input type="text" id="s-amp-user" autocomplete="off"
+                                   value="{{ config.amp.username }}">
+                        </div>
+                        <div class="field">
+                            <label for="s-amp-pass">Password</label>
+                            <div class="password-wrap">
+                                <input type="password" id="s-amp-pass" autocomplete="new-password"
+                                       value="{{ config.amp.password }}">
+                                <button type="button" class="btn-show-pass"
+                                        onclick="togglePass('s-amp-pass', this)">Show</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Service -->
+                <div class="settings-section">
+                    <div class="settings-section-title">Service</div>
+                    <div class="settings-body">
+                        <div class="field">
+                            <label for="s-duration">Whitelist Duration</label>
+                            <div class="input-group">
+                                <input type="number" id="s-duration" min="0.1" step="0.5"
+                                       value="{{ (config.service.whitelist_duration_seconds / 3600) | round(2) }}">
+                                <span class="input-suffix">hours</span>
+                            </div>
+                            <div class="field-hint">How long a viewer stays whitelisted after redemption.</div>
+                        </div>
+                        <div class="field">
+                            <label for="s-interval">Expiry Check Interval</label>
+                            <div class="input-group">
+                                <input type="number" id="s-interval" min="5" step="1"
+                                       value="{{ config.service.expiry_check_interval_seconds }}">
+                                <span class="input-suffix">seconds</span>
+                            </div>
+                            <div class="field-hint">How often expired players are removed.</div>
+                        </div>
+                        <div class="field">
+                            <label for="s-token">Secret Token</label>
+                            <div class="password-wrap">
+                                <input type="password" id="s-token" autocomplete="off"
+                                       placeholder="Leave empty to disable"
+                                       value="{{ config.service.secret_token or '' }}">
+                                <button type="button" class="btn-show-pass"
+                                        onclick="togglePass('s-token', this)">Show</button>
+                            </div>
+                            <div class="field-hint">Protects the <code>/whitelist</code> API from anything on your network calling it. If set, requests must include <code>Authorization: Bearer &lt;token&gt;</code>. Leave empty if you're using the dashboard and Twitch integration only — no external callers need access.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Twitch -->
+                <div class="settings-section">
+                    <div class="settings-section-title">
+                        <span>Twitch Integration</span>
+                        <span class="status-badge {{ twitch_status if twitch_status in ('connected','error','reconnecting') else 'disconnected' }}" id="twitchBadge">
+                            <span class="dot"></span>
+                            <span>{{ twitch_status | capitalize if twitch_status != 'disconnected' else 'Not connected' }}</span>
+                        </span>
+                    </div>
+                    <div class="settings-body">
+                        <div class="notice notice-twitch">
+                            <span>↗</span>
+                            <span>
+                                Register a free app at <strong>dev.twitch.tv/console/apps</strong> to get a Client ID and Secret.
+                                Set the OAuth Redirect URL to: <code id="redirectUriDisplay"></code>
+                            </span>
+                        </div>
+                        <div class="field">
+                            <label for="s-twitch-id">Client ID</label>
+                            <input type="text" id="s-twitch-id" autocomplete="off" spellcheck="false"
+                                   value="{{ config.twitch.client_id if config.twitch is defined else '' }}">
+                        </div>
+                        <div class="field">
+                            <label for="s-twitch-secret">Client Secret</label>
+                            <div class="password-wrap">
+                                <input type="password" id="s-twitch-secret" autocomplete="off"
+                                       value="{{ config.twitch.client_secret if config.twitch is defined else '' }}">
+                                <button type="button" class="btn-show-pass"
+                                        onclick="togglePass('s-twitch-secret', this)">Show</button>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="s-twitch-channel">Your Channel Name</label>
+                            <input type="text" id="s-twitch-channel" autocomplete="off"
+                                   placeholder="yourtwitchname"
+                                   value="{{ config.twitch.channel_name if config.twitch is defined else '' }}">
+                        </div>
+                        <div class="field">
+                            <label for="s-reward">Channel Points Reward</label>
+                            <div class="input-with-btn">
+                                <select id="s-reward" {% if twitch_status != 'connected' %}disabled{% endif %}>
+                                    <option value="">── Any redemption ──</option>
+                                </select>
+                                <button type="button" class="btn btn-ghost" id="loadRewardsBtn"
+                                        onclick="loadRewards()"
+                                        {% if twitch_status != 'connected' %}disabled{% endif %}>
+                                    Load
+                                </button>
+                            </div>
+                            <div class="field-hint">Pick a specific reward to trigger whitelisting, or leave as "Any" to respond to all redemptions.</div>
+                        </div>
+                        <div class="twitch-actions">
+                            <button type="button" class="btn btn-twitch" id="authorizeBtn"
+                                    onclick="authorizeTwitch()">
+                                {% if twitch_status == 'connected' %}Re-authorize{% else %}Authorize with Twitch{% endif %}
+                            </button>
+                            {% if twitch_status == 'connected' %}
+                            <button type="button" class="btn btn-ghost" onclick="disconnectTwitch()">
+                                Disconnect
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logging -->
+                <div class="settings-section">
+                    <div class="settings-section-title">Logging</div>
+                    <div class="settings-body">
+                        <div class="field">
+                            <label for="s-log-level">Log Level</label>
+                            <select id="s-log-level">
+                                {% for lvl in ['DEBUG', 'INFO', 'WARNING', 'ERROR'] %}
+                                <option value="{{ lvl }}"
+                                    {{ 'selected' if config.logging.level == lvl else '' }}>
+                                    {{ lvl }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="s-log-file">Log File Path</label>
+                            <input type="text" id="s-log-file"
+                                   placeholder="Leave empty for stdout / Docker logs"
+                                   value="{{ config.logging.file or '' }}">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Database (read-only) -->
+                <div class="settings-section">
+                    <div class="settings-section-title">Database</div>
+                    <div class="settings-body">
+                        <div class="field">
+                            <label>Path</label>
+                            <div class="readonly-field">{{ config.database.path }}</div>
+                            <div class="field-hint">Configured via file only. Changing requires a restart and data migration.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-save" id="saveBtn">Save Settings</button>
+            </form>
+        </div>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const SECRET_TOKEN   = {{ secret_token | tojson }};
+        const TWITCH_STATUS  = {{ twitch_status | tojson }};
+        const SAVED_REWARD   = {{ (config.twitch.reward_id if config.twitch is defined else '') | tojson }};
+
+        // ── Redirect URI display ─────────────────────────────────────────────
+        document.getElementById('redirectUriDisplay').textContent =
+            window.location.origin + '/twitch/callback';
+
+        // ── Service status badges ────────────────────────────────────────────
+        function setBadge(id, state, label) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.className = 'status-badge ' + state;
+            el.querySelector('span:last-child').textContent = label;
+        }
+
+        async function checkAmpStatus() {
+            try {
+                const res  = await fetch('/amp/status');
+                const data = await res.json();
+                const label = data.status === 'connected' ? 'Connected'
+                    : data.reason === 'auth_failed' ? 'Wrong credentials'
+                    : 'Unreachable';
+                setBadge('ampBadge', data.status === 'connected' ? 'connected' : 'error', label);
+            } catch {
+                setBadge('ampBadge', 'error', 'Unreachable');
+            }
+        }
+
+        async function checkTwitchStatus() {
+            try {
+                const res  = await fetch('/twitch/status');
+                const data = await res.json();
+                const labels = { connected: 'Connected', disconnected: 'Not connected',
+                                 error: 'Error', reconnecting: 'Reconnecting…', connecting: 'Connecting…' };
+                setBadge('twitchBadge', data.status in labels ? data.status : 'disconnected',
+                         labels[data.status] || data.status);
+                // Keep the header pill in sync
+                const pill = document.getElementById('twitchPill');
+                if (pill) {
+                    pill.className = 'twitch-pill ' + data.status;
+                    const label = document.getElementById('twitchPillLabel');
+                    if (label) label.textContent = data.status === 'connected'
+                        ? (data.channel_name || 'Twitch')
+                        : labels[data.status] || data.status;
+                }
+            } catch {}
+        }
+
+        let twitchPollTimer = null;
+        function onSettingsTabOpen() {
+            checkAmpStatus();
+            checkTwitchStatus();
+            twitchPollTimer = setInterval(checkTwitchStatus, 5000);
+        }
+        function onSettingsTabClose() {
+            clearInterval(twitchPollTimer);
+        }
+
+        // ── Tabs ─────────────────────────────────────────────────────────────
+        function activateTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            const tab = document.querySelector(`.tab[data-tab="${name}"]`);
+            if (!tab) return;
+            tab.classList.add('active');
+            document.getElementById('panel-' + name).classList.add('active');
+            sessionStorage.setItem('activeTab', name);
+        }
+        document.querySelectorAll('.tab').forEach(t =>
+            t.addEventListener('click', () => {
+                if (t.dataset.tab !== 'settings') onSettingsTabClose();
+                activateTab(t.dataset.tab);
+                if (t.dataset.tab === 'settings') onSettingsTabOpen();
+            }));
+        const savedTab = sessionStorage.getItem('activeTab');
+        if (savedTab) {
+            activateTab(savedTab);
+            if (savedTab === 'settings') onSettingsTabOpen();
+        }
+
+        // Handle post-OAuth redirect params
+        const params = new URLSearchParams(location.search);
+        if (params.get('twitch') === 'connected') {
+            showToast('Twitch connected!', 'success');
+            activateTab('settings');
+            history.replaceState({}, '', '/');
+            if (TWITCH_STATUS === 'connected') loadRewards();
+        } else if (params.get('twitch') === 'error') {
+            showToast('Twitch authorisation failed', 'error');
+            activateTab('settings');
+            history.replaceState({}, '', '/');
+        }
+
+        // Auto-load rewards if already connected
+        if (TWITCH_STATUS === 'connected') loadRewards();
+
+        // ── Countdown ────────────────────────────────────────────────────────
+        function formatCountdown(s) {
+            if (s <= 0) return 'expiring…';
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`;
+            if (m > 0) return `${m}m ${String(sec).padStart(2,'0')}s`;
+            return `${sec}s`;
+        }
+        function updateCountdowns() {
+            const now = Math.floor(Date.now() / 1000);
+            document.querySelectorAll('.countdown').forEach(el => {
+                const left = parseInt(el.dataset.expires) - now;
+                el.textContent = formatCountdown(Math.max(left, 0));
+                el.className = 'countdown' +
+                    (left < 60 ? ' expiring' : left < 300 ? ' warning' : '');
+            });
+        }
+        setInterval(updateCountdowns, 1000);
+        updateCountdowns();
+
+        // Auto-refresh page every 30s
+        setTimeout(() => location.reload(), 30000);
+
+        // ── Toast ────────────────────────────────────────────────────────────
+        function showToast(msg, type = 'success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.className = `toast ${type} show`;
+            clearTimeout(t._timer);
+            t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+        }
+
+        // ── Auth headers ─────────────────────────────────────────────────────
+        function authHeaders(extra = {}) {
+            const h = { 'Content-Type': 'application/json', ...extra };
+            if (SECRET_TOKEN) h['Authorization'] = 'Bearer ' + SECRET_TOKEN;
+            return h;
+        }
+
+        // ── Add player ───────────────────────────────────────────────────────
+        document.getElementById('addForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const input = document.getElementById('usernameInput');
+            const btn   = document.getElementById('addBtn');
+            const username = input.value.trim();
+            if (!username) return;
+            btn.disabled = true; btn.textContent = 'Adding…';
+            try {
+                const res  = await fetch('/whitelist', {
+                    method: 'POST', headers: authHeaders(),
+                    body: JSON.stringify({ username }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showToast(`${username} whitelisted`);
+                    input.value = '';
+                    setTimeout(() => location.reload(), 400);
+                } else {
+                    showToast(data.message || 'Error', 'error');
+                }
+            } catch { showToast('Network error', 'error'); }
+            finally {
+                btn.disabled = false;
+                btn.textContent = 'Add ({{ duration_hours }}h)';
+            }
+        });
+
+        // ── Remove player ────────────────────────────────────────────────────
+        async function removePlayer(username) {
+            try {
+                const res = await fetch(`/whitelist/${encodeURIComponent(username)}`,
+                    { method: 'DELETE', headers: authHeaders() });
+                if (res.ok) {
+                    document.getElementById(`card-${username}`)?.remove();
+                    const count = document.querySelectorAll('.player-card').length;
+                    document.getElementById('playerCount').textContent = count;
+                    if (count === 0)
+                        document.getElementById('playerList').innerHTML =
+                            '<div class="empty-state"><p>🎮</p><p>No players currently whitelisted</p></div>';
+                    showToast(`${username} removed`);
+                } else { showToast('Failed to remove', 'error'); }
+            } catch { showToast('Network error', 'error'); }
+        }
+
+        // ── Toggle password visibility ────────────────────────────────────────
+        function togglePass(id, btn) {
+            const input = document.getElementById(id);
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.textContent = show ? 'Hide' : 'Show';
+        }
+
+        // ── Load Twitch rewards ──────────────────────────────────────────────
+        async function loadRewards() {
+            const sel = document.getElementById('s-reward');
+            const btn = document.getElementById('loadRewardsBtn');
+            if (btn) { btn.disabled = true; btn.textContent = '…'; }
+            try {
+                const res  = await fetch('/twitch/rewards');
+                const data = await res.json();
+                if (res.ok && data.rewards) {
+                    sel.innerHTML = '<option value="">── Any redemption ──</option>';
+                    data.rewards.forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.id; opt.textContent = r.title;
+                        if (r.id === SAVED_REWARD) opt.selected = true;
+                        sel.appendChild(opt);
+                    });
+                    sel.disabled = false;
+                    showToast('Rewards loaded', 'info');
+                } else {
+                    showToast(data.message || 'Could not load rewards', 'error');
+                }
+            } catch { showToast('Network error', 'error'); }
+            finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
+            }
+        }
+
+        // ── Authorize Twitch ────────────────────────────────────────────────
+        async function authorizeTwitch() {
+            const clientId     = document.getElementById('s-twitch-id').value.trim();
+            const clientSecret = document.getElementById('s-twitch-secret').value.trim();
+            const channelName  = document.getElementById('s-twitch-channel').value.trim();
+
+            if (!clientId || !clientSecret || !channelName) {
+                showToast('Fill in Client ID, Client Secret and Channel Name first', 'error');
+                return;
+            }
+            const btn = document.getElementById('authorizeBtn');
+            btn.disabled = true; btn.textContent = 'Redirecting…';
+
+            try {
+                const res  = await fetch('/twitch/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret,
+                                          channel_name: channelName }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    window.location.href = data.auth_url;
+                } else {
+                    showToast(data.message || 'Error', 'error');
+                    btn.disabled = false; btn.textContent = 'Authorize with Twitch';
+                }
+            } catch {
+                showToast('Network error', 'error');
+                btn.disabled = false; btn.textContent = 'Authorize with Twitch';
+            }
+        }
+
+        // ── Disconnect Twitch ────────────────────────────────────────────────
+        async function disconnectTwitch() {
+            try {
+                const res = await fetch('/twitch/disconnect', { method: 'POST' });
+                if (res.ok) {
+                    showToast('Twitch disconnected');
+                    setTimeout(() => location.reload(), 600);
+                } else { showToast('Failed to disconnect', 'error'); }
+            } catch { showToast('Network error', 'error'); }
+        }
+
+        // ── Save settings ─────────────────────────────────────────────────────
+        document.getElementById('settingsForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = true; btn.textContent = 'Saving…';
+
+            const durationHours = parseFloat(document.getElementById('s-duration').value) || 2;
+            const payload = {
+                amp: {
+                    url:      document.getElementById('s-amp-url').value.trim(),
+                    username: document.getElementById('s-amp-user').value.trim(),
+                    password: document.getElementById('s-amp-pass').value,
+                },
+                service: {
+                    whitelist_duration_seconds:    Math.round(durationHours * 3600),
+                    expiry_check_interval_seconds: parseInt(document.getElementById('s-interval').value) || 60,
+                    secret_token: document.getElementById('s-token').value,
+                },
+                logging: {
+                    level: document.getElementById('s-log-level').value,
+                    file:  document.getElementById('s-log-file').value.trim(),
+                },
+                twitch: {
+                    client_id:     document.getElementById('s-twitch-id').value.trim(),
+                    client_secret: document.getElementById('s-twitch-secret').value.trim(),
+                    channel_name:  document.getElementById('s-twitch-channel').value.trim(),
+                    reward_id:     document.getElementById('s-reward').value,
+                },
+            };
+
+            try {
+                const res  = await fetch('/settings', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (res.ok) { showToast('Settings saved'); }
+                else { showToast(data.message || 'Save failed', 'error'); }
+            } catch { showToast('Network error', 'error'); }
+            finally { btn.disabled = false; btn.textContent = 'Save Settings'; }
+        });
+    </script>
+</body>
+</html>

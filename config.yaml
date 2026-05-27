@@ -1,0 +1,38 @@
+amp:
+  # AMP panel URL. Use the Debian VM's LAN IP (e.g. http://192.168.1.x:8080).
+  url: "http://192.168.1.x:8080"
+  username: "admin"
+  password: "changeme"
+
+service:
+  host: "0.0.0.0"
+  port: 8765
+  # How long (in seconds) a viewer stays whitelisted. Default: 7200 = 2 hours.
+  whitelist_duration_seconds: 7200
+  # How often the background thread checks for expired entries (seconds).
+  expiry_check_interval_seconds: 60
+  # Optional: set a secret token so only Streamer.Bot can call the endpoint.
+  # Leave empty to disable auth (fine if your VM firewall restricts the port to LAN only).
+  # Streamer.Bot must send header: Authorization: Bearer <token>
+  secret_token: ""
+
+twitch:
+  # Register a Twitch app at https://dev.twitch.tv/console/apps
+  # Set the OAuth Redirect URL to: http://<your-unraid-ip>:8765/twitch/callback
+  client_id: ""
+  client_secret: ""
+  channel_name: ""   # Your Twitch username (lowercase)
+  reward_id: ""      # Leave empty to trigger on any redemption
+
+  # Set automatically by the dashboard OAuth flow — do not edit manually
+  access_token: ""
+  refresh_token: ""
+  broadcaster_id: ""
+
+database:
+  path: "/config/whitelist.db"
+
+logging:
+  level: "INFO"
+  # Set to empty string to log to stdout/journal only (recommended for systemd).
+  file: ""

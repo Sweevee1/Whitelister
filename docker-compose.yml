@@ -1,0 +1,8 @@
+services:
+  whitelister:
+    build: .
+    ports:
+      - "8765:8765"
+    volumes:
+      - /mnt/user/appdata/whitelister:/config
+    restart: unless-stopped
