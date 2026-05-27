@@ -2,6 +2,7 @@ services:
   whitelister:
     build: .
     ports:
+      - "8764:8764"
       - "8765:8765"
     volumes:
       - /mnt/user/appdata/whitelister:/config
