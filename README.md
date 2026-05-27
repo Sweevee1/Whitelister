@@ -1,58 +1,63 @@
 # Minecraft Twitch Whitelister
 
-A Flask service that temporarily whitelists Twitch viewers on a Minecraft server when they redeem a channel points reward. Viewers are added for 2 hours, then automatically removed — server-side, so the timer survives the stream ending or Streamer.Bot restarting.
+A Flask service that temporarily whitelists Twitch viewers on a Minecraft server when they redeem a channel points reward. Viewers are added for 2 hours, then automatically removed — server-side, so the timer survives the stream ending or the container restarting.
+
+Twitch EventSub is handled directly by this service via WebSocket — no Streamer.Bot or public HTTPS endpoint required. A web dashboard lets you manage the whitelist and configure everything without touching files.
 
 ## How it works
 
-1. A viewer redeems a channel points reward in Twitch chat and enters their Minecraft username.
-2. Streamer.Bot POSTs the username to this service's `/whitelist` endpoint.
-3. The service sends `whitelist add <username>` to Minecraft via AMP's REST API.
+1. A viewer redeems a channel points reward and enters their Minecraft username.
+2. The service receives the redemption via Twitch EventSub WebSocket.
+3. It sends `whitelist add <username>` to Minecraft via AMP's REST API.
 4. The username and expiry timestamp are saved to SQLite.
 5. A background thread checks every 60 seconds for expired entries and sends `whitelist remove <username>` for each one.
-6. On restart, the service re-adds all non-expired entries to the whitelist (idempotent — Minecraft ignores duplicates).
+6. On restart, the service re-adds all non-expired entries to the whitelist (idempotent).
 
 ```
-Twitch viewer redeems reward
+Viewer redeems channel points reward
         │
         ▼
-  Streamer.Bot
-  POST /whitelist {"username": "Steve"}
+  Twitch EventSub WebSocket
         │
         ▼
-  whitelister (Docker container on Unraid)
+  Whitelister (Docker container on Unraid)
   ├── validates username (3–16 chars, a–z/0–9/_)
-  ├── calls AMP API on Debian VM → whitelist add Steve
-  └── saves Steve + expires_at to SQLite
+  ├── calls AMP API → whitelist add <username>
+  └── saves username + expires_at to SQLite
         │
         ▼  (background thread, every 60s)
   check SQLite for expired entries
-  └── calls AMP API → whitelist remove Steve
+  └── calls AMP API → whitelist remove <username>
       └── deletes entry from SQLite
 ```
+
+The `/whitelist` HTTP endpoint is also available for Streamer.Bot or other external tools.
 
 ## Prerequisites
 
 - Docker (Unraid has this built in)
-- AMP (CubeCoders) managing the Minecraft instance on your Debian VM
+- AMP (CubeCoders) managing the Minecraft instance
 - `white-list=true` set in Minecraft's `server.properties`
-- Streamer.Bot configured to POST to this service on reward redemption
+- A Twitch app registered at [dev.twitch.tv](https://dev.twitch.tv/console/apps)
 
 ## Deployment (Unraid)
 
-**1. Create the appdata directory and drop in your config:**
+**1. Clone the repo and set up your config:**
 
 ```bash
+git clone https://github.com/Sweevee1/Whitelister.git /mnt/user/appdata/whitelister-app
 mkdir -p /mnt/user/appdata/whitelister
-cp config.yaml /mnt/user/appdata/whitelister/config.yaml
+cp /mnt/user/appdata/whitelister-app/config.yaml /mnt/user/appdata/whitelister/config.yaml
 ```
 
 Edit `/mnt/user/appdata/whitelister/config.yaml` — at minimum set:
-- `amp.url` — your Debian VM's LAN IP and AMP port (e.g. `http://192.168.1.50:8080`)
+- `amp.url` — your AMP instance URL for the Minecraft server (e.g. `http://192.168.1.50:8080`)
 - `amp.username` / `amp.password` — your AMP credentials
 
 **2. Build and start the container:**
 
 ```bash
+cd /mnt/user/appdata/whitelister-app
 docker compose up -d --build
 ```
 
@@ -62,7 +67,9 @@ docker compose logs -f
 curl http://localhost:8765/health
 ```
 
-The SQLite database is created automatically at `/mnt/user/appdata/whitelister/whitelist.db`.
+**3. Connect Twitch via the dashboard:**
+
+Open `http://<Unraid-IP>:8765` in your browser and follow the Twitch setup flow. You'll need your Twitch app's client ID and secret — set the OAuth Redirect URL in your Twitch app to `http://<Unraid-IP>:8765/twitch/callback`.
 
 ## Configuration
 
@@ -70,70 +77,88 @@ The SQLite database is created automatically at `/mnt/user/appdata/whitelister/w
 
 ```yaml
 amp:
-  url: "http://192.168.1.x:8080"  # Debian VM's LAN IP and AMP port
+  url: "http://192.168.1.x:8080"  # AMP instance URL for the Minecraft server
   username: "admin"
   password: "changeme"
 
 service:
   whitelist_duration_seconds: 7200   # 2 hours
   expiry_check_interval_seconds: 60
-  secret_token: ""                   # Optional Bearer token for auth
+  secret_token: ""                   # Optional Bearer token for the HTTP endpoint
+
+twitch:
+  client_id: ""       # From dev.twitch.tv
+  client_secret: ""
+  channel_name: ""    # Your Twitch username (lowercase)
+  reward_id: ""       # Leave empty to trigger on any redemption
 
 database:
-  path: "/config/whitelist.db"       # Don't change — maps to appdata
+  path: "/config/whitelist.db"   # Don't change — maps to appdata
 
 logging:
   level: "INFO"
   file: ""   # Empty = stdout/Docker logs only (recommended)
 ```
 
-If `secret_token` is set, Streamer.Bot must send `Authorization: Bearer <token>` with every request.
+Twitch tokens (`access_token`, `refresh_token`, `broadcaster_id`) are written automatically by the dashboard OAuth flow.
 
-## Streamer.Bot setup
+## Dashboard
 
-Add a "POST Request" action triggered by the channel points reward:
+The web dashboard at `http://<Unraid-IP>:8765` lets you:
 
-- **URL:** `http://<Unraid-IP>:8765/whitelist`
-- **Method:** POST
-- **Headers:** `Content-Type: application/json` (add `Authorization: Bearer <token>` if using `secret_token`)
-- **Body:** `{"username": "%rewardMessage%"}`
-
-`%rewardMessage%` is the text the viewer typed when redeeming the reward.
+- View and manually remove active whitelist entries
+- Connect/disconnect Twitch EventSub
+- Configure AMP and Twitch settings
+- Check AMP connectivity
 
 ## API
 
-### `GET /health`
-Returns `{"status": "ok"}`. Use this to verify the service is up.
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/` | Web dashboard |
+| GET | `/health` | Liveness check |
+| POST | `/whitelist` | Add player (Streamer.Bot / external) |
+| DELETE | `/whitelist/<username>` | Remove player |
+| GET | `/settings` | Get current config (minus tokens) |
+| POST | `/settings` | Save config |
+| GET | `/amp/status` | Test AMP connectivity |
+| POST | `/twitch/auth` | Save Twitch credentials + return OAuth URL |
+| GET | `/twitch/callback` | OAuth callback |
+| GET | `/twitch/status` | EventSub connection status |
+| GET | `/twitch/rewards` | List channel point rewards |
+| POST | `/twitch/disconnect` | Clear tokens + stop client |
 
 ### `POST /whitelist`
-Adds a username to the whitelist.
 
-**Request:**
 ```json
 {"username": "Steve"}
 ```
 
-**Response (success):**
+Response:
 ```json
 {"status": "ok", "username": "Steve", "expires_at": "2026-05-26T14:00:00Z"}
 ```
 
-**Response (errors):**
 | Status | Meaning |
 |--------|---------|
 | 400 | Invalid or missing username |
 | 401 | Missing or wrong Bearer token |
 | 503 | AMP is unreachable |
 
+If `secret_token` is set in config, include `Authorization: Bearer <token>` in the request.
+
 ## Development
 
 ```bash
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
-venv/bin/flask --app "whitelister.app:create_app()" run --port 8765
+
+# Windows (PowerShell)
+$env:CONFIG_PATH="config.dev.yaml"
+venv\Scripts\flask --app "whitelister.app:create_app()" run --port 8765
 ```
 
-To test expiry without waiting 2 hours, set in `config.yaml`:
+To test expiry quickly, set in your dev config:
 ```yaml
 service:
   whitelist_duration_seconds: 10
@@ -143,7 +168,8 @@ service:
 ## Architecture notes
 
 - All shared state is created in `create_app()` and passed explicitly — no module-level globals.
-- SQLite uses WAL mode so the expiry thread and request handlers don't block each other on reads.
-- AMP auth is session-based (login once, store `SESSIONID` cookie). The client auto-re-authenticates on session expiry.
-- If AMP fails during an expiry removal, the entry stays in SQLite and is retried on the next cycle.
-- The config path defaults to `CONFIG_PATH` env var, falling back to `config.yaml`. The Docker image sets `CONFIG_PATH=/config/config.yaml`.
+- Two locks: `db_lock` serialises SQLite writes; `AMPClient._lock` serialises AMP session refresh.
+- SQLite uses WAL mode so the expiry thread and request handlers don't block each other.
+- AMP auth is session-based (`SESSIONID` body parameter on every request). The client auto-re-authenticates on session expiry.
+- The Twitch EventSub client auto-reconnects with exponential backoff and refreshes tokens on 401.
+- If AMP fails during expiry removal, the entry stays in SQLite and is retried next cycle.
