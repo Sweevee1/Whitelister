@@ -2,7 +2,7 @@
 
 A Flask service that temporarily whitelists Twitch viewers on a Minecraft server when they redeem a channel points reward. Viewers are added for 2 hours, then automatically removed — server-side, so the timer survives the stream ending or the container restarting.
 
-Twitch EventSub is handled directly by this service via WebSocket — no Streamer.Bot or public HTTPS endpoint required. A web dashboard lets you manage the whitelist and configure everything without touching files.
+Twitch EventSub is handled directly by this service via WebSocket — no public HTTPS endpoint required. A web dashboard lets you manage the whitelist and configure everything without touching files.
 
 ## How it works
 
@@ -30,8 +30,6 @@ Viewer redeems channel points reward
   └── calls AMP API → whitelist remove <username>
       └── deletes entry from SQLite
 ```
-
-The `/whitelist` HTTP endpoint is also available for Streamer.Bot or other external tools.
 
 ## Prerequisites
 
@@ -117,7 +115,7 @@ The web dashboard at `http://<Unraid-IP>:8765` lets you:
 |--------|------|---------|
 | GET | `/` | Web dashboard |
 | GET | `/health` | Liveness check |
-| POST | `/whitelist` | Add player (Streamer.Bot / external) |
+| POST | `/whitelist` | Add player manually |
 | DELETE | `/whitelist/<username>` | Remove player |
 | GET | `/settings` | Get current config (minus tokens) |
 | POST | `/settings` | Save config |
