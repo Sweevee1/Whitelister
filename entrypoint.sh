@@ -10,7 +10,7 @@ if [ ! -f /config/key.pem ] || [ ! -f /config/cert.pem ]; then
     echo "Certificate generated."
 fi
 
-# HTTP on 8764 → redirect to HTTPS on 8765, so plain-HTTP clients don't get SSL errors.
+# HTTP convenience redirect on 8764 → HTTPS 8765 (for old bookmarks / Unraid WebUI links)
 python3 -c "
 import http.server
 
@@ -26,10 +26,19 @@ class R(http.server.BaseHTTPRequestHandler):
 http.server.HTTPServer(('0.0.0.0', 8764), R).serve_forever()
 " &
 
-exec gunicorn \
+# Gunicorn serves HTTPS on the internal port only; the proxy below owns :8765 publicly.
+gunicorn \
     --workers 1 \
     --threads 8 \
-    --bind 0.0.0.0:8765 \
+    --bind 127.0.0.1:8766 \
     --certfile /config/cert.pem \
     --keyfile /config/key.pem \
-    "whitelister.app:create_app()"
+    "whitelister.app:create_app()" &
+
+# Give gunicorn a moment before the proxy starts forwarding.
+sleep 1
+
+# Dual-protocol proxy on public port 8765:
+#   TLS ClientHello (0x16) → raw tunnel to gunicorn on 8766
+#   plain HTTP             → 301 redirect to https://host:8765/
+exec python3 /app/proxy.py
