@@ -57,9 +57,31 @@ def _restore_whitelist(conn, amp_client: AMPClient, db_lock: threading.Lock) -> 
                 logger.error("Failed to restore %s: %s", username, e)
 
 
+DEFAULT_CONFIG = {
+    "amp": {"url": "", "username": "admin", "password": "", "instance_id": ""},
+    "service": {
+        "host": "0.0.0.0",
+        "port": 8765,
+        "whitelist_duration_seconds": 7200,
+        "expiry_check_interval_seconds": 60,
+        "secret_token": "",
+    },
+    "twitch": {
+        "client_id": "", "client_secret": "", "channel_name": "",
+        "reward_id": "", "access_token": "", "refresh_token": "", "broadcaster_id": "",
+    },
+    "database": {"path": "/config/whitelist.db"},
+    "logging": {"level": "INFO", "file": ""},
+}
+
+
 def create_app(config_path: str = None) -> Flask:
     if config_path is None:
         config_path = os.environ.get("CONFIG_PATH", "config.yaml")
+    if not os.path.exists(config_path):
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        with open(config_path, "w") as f:
+            yaml.dump(DEFAULT_CONFIG, f, default_flow_style=False, allow_unicode=True)
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
@@ -77,7 +99,8 @@ def create_app(config_path: str = None) -> Flask:
     secret_token: str = config["service"].get("secret_token", "") or ""
     duration: int = int(config["service"]["whitelist_duration_seconds"])
 
-    _restore_whitelist(conn, amp, db_lock)
+    if config["amp"].get("url") and config["amp"].get("password"):
+        _restore_whitelist(conn, amp, db_lock)
     start_expiry_thread(
         conn, amp, db_lock, int(config["service"]["expiry_check_interval_seconds"])
     )
