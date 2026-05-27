@@ -6,22 +6,22 @@
     <title>Whitelist Manager</title>
     <style>
         :root {
-            --bg:           #1a2035;
-            --surface:      #1e2740;
-            --surface-alt:  #232f4a;
-            --border:       #2d3d5c;
-            --accent:       #3d8fe0;
-            --accent-dark:  #2d6db0;
-            --accent-dim:   #1b3a5c;
-            --text:         #c8d4ec;
-            --text-muted:   #6879a0;
-            --success:      #2ecc71;
-            --warning:      #e8a020;
-            --danger:       #e05050;
-            --danger-dim:   #3a1f1f;
+            --bg:           #dde3ea;
+            --surface:      #eaeff4;
+            --surface-alt:  #e2e8ef;
+            --border:       #bec9d6;
+            --accent:       #2563eb;
+            --accent-dark:  #1d4ed8;
+            --accent-dim:   #eff6ff;
+            --text:         #1e293b;
+            --text-muted:   #64748b;
+            --success:      #16a34a;
+            --warning:      #d97706;
+            --danger:       #dc2626;
+            --danger-dim:   #fef2f2;
             --twitch:       #9147ff;
-            --twitch-dark:  #6f34c2;
-            --twitch-dim:   #2a1a4a;
+            --twitch-dark:  #7c35e0;
+            --twitch-dim:   #f5f3ff;
             --radius:       6px;
         }
 
@@ -52,12 +52,15 @@
         .logo { display: flex; align-items: center; gap: 0.5rem; }
         .logo-icon {
             width: 28px; height: 28px;
-            background: var(--accent);
-            border-radius: 6px;
+            border-radius: 4px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 0.9rem; flex-shrink: 0;
+            flex-shrink: 0; overflow: hidden;
         }
-        h1 { font-size: 1rem; font-weight: 600; color: #fff; }
+        .section-icon {
+            flex-shrink: 0; opacity: 0.65;
+            display: flex; align-items: center;
+        }
+        h1 { font-size: 1rem; font-weight: 600; color: var(--text); }
         .subtitle { font-size: 0.75rem; color: var(--text-muted); margin-top: 1px; }
 
         .twitch-pill {
@@ -65,15 +68,15 @@
             padding: 0.25rem 0.6rem;
             border-radius: 20px;
             font-size: 0.75rem; font-weight: 500;
-            background: var(--twitch-dim);
-            color: #c9a7ff;
-            border: 1px solid #4a2a7a;
+            background: var(--surface-alt);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
             transition: all 0.2s;
             white-space: nowrap;
         }
-        .twitch-pill.connected { background: var(--twitch-dim); color: #c9a7ff; border-color: #6030a0; }
+        .twitch-pill.connected { background: var(--twitch-dim); color: #7c3aed; border-color: #c4b5fd; }
         .twitch-pill.disconnected, .twitch-pill.error { background: var(--surface-alt); color: var(--text-muted); border-color: var(--border); }
-        .twitch-pill.reconnecting { background: var(--surface-alt); color: var(--warning); border-color: #4a3010; }
+        .twitch-pill.reconnecting { background: #fffbeb; color: var(--warning); border-color: #fed7aa; }
         .pill-dot {
             width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
             background: currentColor;
@@ -102,8 +105,13 @@
         .panel.active { display: block; }
 
         /* ── Add form ── */
-        .add-form { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
-        .add-form input { flex: 1; min-width: 0; }
+        .add-form {
+            display: flex; gap: 0.5rem; margin-bottom: 1.25rem;
+            flex-wrap: wrap; align-items: center;
+        }
+        .add-form > input[type="text"] { flex: 1; min-width: 140px; }
+        .add-duration { display: flex; gap: 0.25rem; }
+        .duration-num { width: 58px !important; }
 
         /* ── Inputs ── */
         input[type="text"],
@@ -113,7 +121,7 @@
         select {
             width: 100%;
             padding: 0.6rem 0.8rem;
-            background: var(--surface-alt);
+            background: var(--surface);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             color: var(--text);
@@ -124,10 +132,11 @@
         input:focus, select:focus { outline: none; border-color: var(--accent); }
         input::placeholder { color: var(--text-muted); }
         select {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236879a0' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2364748b' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
             background-repeat: no-repeat;
             background-position: right 0.75rem center;
             padding-right: 2rem;
+            background-color: var(--surface);
         }
         input[type="number"] { -moz-appearance: textfield; }
         input[type="number"]::-webkit-inner-spin-button { display: none; }
@@ -146,7 +155,7 @@
         .btn-primary:hover { background: var(--accent-dark); }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-danger {
-            background: transparent; border: 1px solid var(--danger-dim);
+            background: transparent; border: 1px solid #fca5a5;
             color: var(--danger); padding: 0.35rem 0.7rem; font-size: 0.8rem;
         }
         .btn-danger:hover { background: var(--danger-dim); }
@@ -176,7 +185,7 @@
         }
         .player-info { flex: 1; min-width: 0; }
         .player-name {
-            font-weight: 600; color: #fff; font-size: 0.95rem;
+            font-weight: 600; color: var(--text); font-size: 0.95rem;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .player-meta {
@@ -216,13 +225,13 @@
         .status-badge .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
         .status-badge.checking { color: var(--text-muted); }
         .status-badge.checking .dot { background: var(--text-muted); opacity: 0.4; animation: pulse 1s infinite; }
-        .status-badge.connected { background: rgba(46,204,113,0.12); color: #2ecc71; border: 1px solid rgba(46,204,113,0.25); }
-        .status-badge.connected .dot { background: var(--success); }
-        .status-badge.error { background: rgba(224,80,80,0.12); color: var(--danger); border: 1px solid rgba(224,80,80,0.25); }
+        .status-badge.connected { background: rgba(22,163,74,0.1); color: #16a34a; border: 1px solid rgba(22,163,74,0.25); }
+        .status-badge.connected .dot { background: #16a34a; }
+        .status-badge.error { background: rgba(220,38,38,0.08); color: var(--danger); border: 1px solid rgba(220,38,38,0.2); }
         .status-badge.error .dot { background: var(--danger); }
-        .status-badge.disconnected { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); }
+        .status-badge.disconnected { background: var(--surface-alt); color: var(--text-muted); border: 1px solid var(--border); }
         .status-badge.disconnected .dot { background: var(--text-muted); opacity: 0.4; }
-        .status-badge.reconnecting { background: rgba(232,160,32,0.12); color: var(--warning); border: 1px solid rgba(232,160,32,0.25); }
+        .status-badge.reconnecting { background: rgba(217,119,6,0.1); color: var(--warning); border: 1px solid rgba(217,119,6,0.2); }
         .status-badge.reconnecting .dot { background: var(--warning); animation: pulse 1s infinite; }
         .settings-body { padding: 1rem; display: flex; flex-direction: column; gap: 0.85rem; }
         .field label {
@@ -267,10 +276,14 @@
             padding: 0.7rem 0.9rem; border-radius: var(--radius);
             font-size: 0.8rem; margin-bottom: 1rem;
         }
-        .notice-blue { background: var(--accent-dim); border: 1px solid #2a4a6a; color: #8ab4d4; }
-        .notice-twitch { background: var(--twitch-dim); border: 1px solid #4a2a7a; color: #c9a7ff; }
+        .notice-blue { background: var(--accent-dim); border: 1px solid #bfdbfe; color: #1d4ed8; }
+        .notice-twitch { background: var(--twitch-dim); border: 1px solid #ddd6fe; color: #7c3aed; }
 
         .twitch-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+        /* ── Duration row ── */
+        .duration-row { display: flex; gap: 0.5rem; }
+        .duration-row .input-group { flex: 1; }
 
         /* ── Toast ── */
         .toast {
@@ -282,7 +295,7 @@
             opacity: 0; transition: opacity 0.2s, transform 0.2s;
             pointer-events: none; white-space: nowrap; z-index: 100;
         }
-        .toast.success { background: var(--success); color: #0a2010; }
+        .toast.success { background: var(--success); color: #fff; }
         .toast.error   { background: var(--danger);  color: #fff; }
         .toast.info    { background: var(--accent);  color: #fff; }
         .toast.show    { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -292,7 +305,19 @@
     <header>
         <div class="header-top">
             <div class="logo">
-                <div class="logo-icon">⛏</div>
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="16" height="16" fill="#9E6B48"/>
+                        <rect width="16" height="5" fill="#78C832"/>
+                        <rect width="16" height="2" fill="#5A9C1E"/>
+                        <rect x="1" y="7" width="2" height="2" fill="#6B4423" opacity="0.8"/>
+                        <rect x="6" y="9" width="2" height="2" fill="#6B4423" opacity="0.8"/>
+                        <rect x="11" y="7" width="2" height="2" fill="#6B4423" opacity="0.8"/>
+                        <rect x="3" y="12" width="2" height="2" fill="#6B4423" opacity="0.8"/>
+                        <rect x="9" y="12" width="2" height="2" fill="#B87C54" opacity="0.6"/>
+                        <rect x="13" y="10" width="2" height="2" fill="#6B4423" opacity="0.8"/>
+                    </svg>
+                </div>
                 <div>
                     <h1>Whitelist Manager</h1>
                     <div class="subtitle">Minecraft · Twitch</div>
@@ -326,9 +351,21 @@
                 <input type="text" id="usernameInput" placeholder="Minecraft username"
                        maxlength="16" autocomplete="off" spellcheck="false"
                        inputmode="text" autocapitalize="none">
-                <button type="submit" class="btn btn-primary" id="addBtn">
-                    Add ({{ duration_hours }}h)
-                </button>
+                <div class="add-duration">
+                    <div class="input-group">
+                        <input type="number" id="addHours" class="duration-num"
+                               min="0" max="720" value="{{ duration_hours | int }}"
+                               autocomplete="off">
+                        <span class="input-suffix">h</span>
+                    </div>
+                    <div class="input-group">
+                        <input type="number" id="addMinutes" class="duration-num"
+                               min="0" max="59" value="{{ ((config.service.whitelist_duration_seconds % 3600) // 60) | int }}"
+                               autocomplete="off">
+                        <span class="input-suffix">m</span>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" id="addBtn">Add</button>
             </form>
 
             <p class="player-count">
@@ -365,14 +402,17 @@
         <div class="panel" id="panel-settings">
             <div class="notice notice-blue">
                 <span>ℹ</span>
-                <span>AMP credential, interval and Twitch changes require a service restart to fully take effect.</span>
+                <span>Interval and logging changes take effect after a service restart. All other settings apply immediately on save.</span>
             </div>
 
-            <form id="settingsForm">
+            <form id="settingsForm" autocomplete="off">
                 <!-- AMP -->
                 <div class="settings-section">
                     <div class="settings-section-title">
+                        <div style="display:flex;align-items:center;gap:0.4rem">
+                        <span class="section-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="2" width="14" height="5" rx="1.5"/><rect x="1" y="9" width="14" height="5" rx="1.5"/><circle cx="12.5" cy="4.5" r="1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="11.5" r="1" fill="currentColor" stroke="none"/></svg></span>
                         <span>AMP Connection</span>
+                        </div>
                         <span class="status-badge checking" id="ampBadge">
                             <span class="dot"></span><span>Checking…</span>
                         </span>
@@ -381,7 +421,7 @@
                         <div class="field">
                             <label for="s-amp-url">Panel URL</label>
                             <input type="url" id="s-amp-url" placeholder="http://192.168.1.x:8080"
-                                   value="{{ config.amp.url }}">
+                                   value="{{ config.amp.url }}" autocomplete="off">
                         </div>
                         <div class="field">
                             <label for="s-amp-user">Username</label>
@@ -397,19 +437,49 @@
                                         onclick="togglePass('s-amp-pass', this)">Show</button>
                             </div>
                         </div>
+                        <div class="field">
+                            <label>AMP Instance</label>
+                            <input type="hidden" id="s-amp-instance" value="{{ config.amp.instance_id }}">
+                            <div class="input-with-btn" style="align-items:center">
+                                <span id="amp-instance-label" style="flex:1;font-size:0.875rem;color:var(--text-muted)">
+                                    {%- if config.amp.instance_id -%}
+                                    Instance configured — click Load to refresh
+                                    {%- else -%}
+                                    Using URL directly — click Load if URL is an ADS panel
+                                    {%- endif -%}
+                                </span>
+                                <button type="button" class="btn btn-ghost" onclick="loadAmpInstances(this)">Load</button>
+                            </div>
+                            <div id="amp-instance-list" style="display:none;margin-top:0.5rem;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden"></div>
+                            <div class="field-hint">If your AMP URL is the ADS panel, click Load, then click Use next to your Minecraft instance.</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Service -->
                 <div class="settings-section">
-                    <div class="settings-section-title">Service</div>
+                    <div class="settings-section-title">
+                        <div style="display:flex;align-items:center;gap:0.4rem">
+                        <span class="section-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/><circle cx="5" cy="4" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="6" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></span>
+                        <span>Service</span>
+                        </div>
+                    </div>
                     <div class="settings-body">
                         <div class="field">
-                            <label for="s-duration">Whitelist Duration</label>
-                            <div class="input-group">
-                                <input type="number" id="s-duration" min="0.1" step="0.5"
-                                       value="{{ (config.service.whitelist_duration_seconds / 3600) | round(2) }}">
-                                <span class="input-suffix">hours</span>
+                            <label>Whitelist Duration</label>
+                            <div class="duration-row">
+                                <div class="input-group">
+                                    <input type="number" id="s-duration-h" min="0" max="720"
+                                           value="{{ (config.service.whitelist_duration_seconds // 3600) | int }}"
+                                           autocomplete="off">
+                                    <span class="input-suffix">h</span>
+                                </div>
+                                <div class="input-group">
+                                    <input type="number" id="s-duration-m" min="0" max="59"
+                                           value="{{ ((config.service.whitelist_duration_seconds % 3600) // 60) | int }}"
+                                           autocomplete="off">
+                                    <span class="input-suffix">m</span>
+                                </div>
                             </div>
                             <div class="field-hint">How long a viewer stays whitelisted after redemption.</div>
                         </div>
@@ -417,7 +487,8 @@
                             <label for="s-interval">Expiry Check Interval</label>
                             <div class="input-group">
                                 <input type="number" id="s-interval" min="5" step="1"
-                                       value="{{ config.service.expiry_check_interval_seconds }}">
+                                       value="{{ config.service.expiry_check_interval_seconds }}"
+                                       autocomplete="off">
                                 <span class="input-suffix">seconds</span>
                             </div>
                             <div class="field-hint">How often expired players are removed.</div>
@@ -439,7 +510,10 @@
                 <!-- Twitch -->
                 <div class="settings-section">
                     <div class="settings-section-title">
+                        <div style="display:flex;align-items:center;gap:0.4rem">
+                        <span class="section-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 0L0 4v10h4v2h2l2-2h3l4-4V0H2zm12 9l-3 3H8l-2 2v-2H3V2h11v7z"/><rect x="6" y="4" width="1.5" height="4"/><rect x="9.5" y="4" width="1.5" height="4"/></svg></span>
                         <span>Twitch Integration</span>
+                        </div>
                         <span class="status-badge {{ twitch_status if twitch_status in ('connected','error','reconnecting') else 'disconnected' }}" id="twitchBadge">
                             <span class="dot"></span>
                             <span>{{ twitch_status | capitalize if twitch_status != 'disconnected' else 'Not connected' }}</span>
@@ -503,7 +577,12 @@
 
                 <!-- Logging -->
                 <div class="settings-section">
-                    <div class="settings-section-title">Logging</div>
+                    <div class="settings-section-title">
+                        <div style="display:flex;align-items:center;gap:0.4rem">
+                        <span class="section-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="10.5" x2="9" y2="10.5"/></svg></span>
+                        <span>Logging</span>
+                        </div>
+                    </div>
                     <div class="settings-body">
                         <div class="field">
                             <label for="s-log-level">Log Level</label>
@@ -518,7 +597,7 @@
                         </div>
                         <div class="field">
                             <label for="s-log-file">Log File Path</label>
-                            <input type="text" id="s-log-file"
+                            <input type="text" id="s-log-file" autocomplete="off"
                                    placeholder="Leave empty for stdout / Docker logs"
                                    value="{{ config.logging.file or '' }}">
                         </div>
@@ -527,7 +606,12 @@
 
                 <!-- Database (read-only) -->
                 <div class="settings-section">
-                    <div class="settings-section-title">Database</div>
+                    <div class="settings-section-title">
+                        <div style="display:flex;align-items:center;gap:0.4rem">
+                        <span class="section-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><ellipse cx="8" cy="4" rx="6" ry="2"/><path d="M2 4v4c0 1.1 2.7 2 6 2s6-.9 6-2V4"/><path d="M2 8v4c0 1.1 2.7 2 6 2s6-.9 6-2V8"/></svg></span>
+                        <span>Database</span>
+                        </div>
+                    </div>
                     <div class="settings-body">
                         <div class="field">
                             <label>Path</label>
@@ -545,15 +629,29 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        const SECRET_TOKEN   = {{ secret_token | tojson }};
-        const TWITCH_STATUS  = {{ twitch_status | tojson }};
-        const SAVED_REWARD   = {{ (config.twitch.reward_id if config.twitch is defined else '') | tojson }};
+        const SECRET_TOKEN  = {{ secret_token | tojson }};
+        const TWITCH_STATUS = {{ twitch_status | tojson }};
+        const SAVED_REWARD  = {{ (config.twitch.reward_id if config.twitch is defined else '') | tojson }};
 
-        // ── Redirect URI display ─────────────────────────────────────────────
-        document.getElementById('redirectUriDisplay').textContent =
-            window.location.origin + '/twitch/callback';
+        // ── Utilities ────────────────────────────────────────────────────────
+        function escapeHtml(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        }
 
-        // ── Service status badges ────────────────────────────────────────────
+        function showToast(msg, type = 'success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.className = `toast ${type} show`;
+            clearTimeout(t._timer);
+            t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+        }
+
+        function authHeaders(extra = {}) {
+            const h = { 'Content-Type': 'application/json', ...extra };
+            if (SECRET_TOKEN) h['Authorization'] = 'Bearer ' + SECRET_TOKEN;
+            return h;
+        }
+
         function setBadge(id, state, label) {
             const el = document.getElementById(id);
             if (!el) return;
@@ -561,86 +659,9 @@
             el.querySelector('span:last-child').textContent = label;
         }
 
-        async function checkAmpStatus() {
-            try {
-                const res  = await fetch('/amp/status');
-                const data = await res.json();
-                const label = data.status === 'connected' ? 'Connected'
-                    : data.reason === 'auth_failed' ? 'Wrong credentials'
-                    : 'Unreachable';
-                setBadge('ampBadge', data.status === 'connected' ? 'connected' : 'error', label);
-            } catch {
-                setBadge('ampBadge', 'error', 'Unreachable');
-            }
-        }
-
-        async function checkTwitchStatus() {
-            try {
-                const res  = await fetch('/twitch/status');
-                const data = await res.json();
-                const labels = { connected: 'Connected', disconnected: 'Not connected',
-                                 error: 'Error', reconnecting: 'Reconnecting…', connecting: 'Connecting…' };
-                setBadge('twitchBadge', data.status in labels ? data.status : 'disconnected',
-                         labels[data.status] || data.status);
-                // Keep the header pill in sync
-                const pill = document.getElementById('twitchPill');
-                if (pill) {
-                    pill.className = 'twitch-pill ' + data.status;
-                    const label = document.getElementById('twitchPillLabel');
-                    if (label) label.textContent = data.status === 'connected'
-                        ? (data.channel_name || 'Twitch')
-                        : labels[data.status] || data.status;
-                }
-            } catch {}
-        }
-
-        let twitchPollTimer = null;
-        function onSettingsTabOpen() {
-            checkAmpStatus();
-            checkTwitchStatus();
-            twitchPollTimer = setInterval(checkTwitchStatus, 5000);
-        }
-        function onSettingsTabClose() {
-            clearInterval(twitchPollTimer);
-        }
-
-        // ── Tabs ─────────────────────────────────────────────────────────────
-        function activateTab(name) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            const tab = document.querySelector(`.tab[data-tab="${name}"]`);
-            if (!tab) return;
-            tab.classList.add('active');
-            document.getElementById('panel-' + name).classList.add('active');
-            sessionStorage.setItem('activeTab', name);
-        }
-        document.querySelectorAll('.tab').forEach(t =>
-            t.addEventListener('click', () => {
-                if (t.dataset.tab !== 'settings') onSettingsTabClose();
-                activateTab(t.dataset.tab);
-                if (t.dataset.tab === 'settings') onSettingsTabOpen();
-            }));
-        const savedTab = sessionStorage.getItem('activeTab');
-        if (savedTab) {
-            activateTab(savedTab);
-            if (savedTab === 'settings') onSettingsTabOpen();
-        }
-
-        // Handle post-OAuth redirect params
-        const params = new URLSearchParams(location.search);
-        if (params.get('twitch') === 'connected') {
-            showToast('Twitch connected!', 'success');
-            activateTab('settings');
-            history.replaceState({}, '', '/');
-            if (TWITCH_STATUS === 'connected') loadRewards();
-        } else if (params.get('twitch') === 'error') {
-            showToast('Twitch authorisation failed', 'error');
-            activateTab('settings');
-            history.replaceState({}, '', '/');
-        }
-
-        // Auto-load rewards if already connected
-        if (TWITCH_STATUS === 'connected') loadRewards();
+        // ── Redirect URI display ─────────────────────────────────────────────
+        document.getElementById('redirectUriDisplay').textContent =
+            window.location.origin + '/twitch/callback';
 
         // ── Countdown ────────────────────────────────────────────────────────
         function formatCountdown(s) {
@@ -664,22 +685,178 @@
         setInterval(updateCountdowns, 1000);
         updateCountdowns();
 
-        // Auto-refresh page every 30s
-        setTimeout(() => location.reload(), 30000);
-
-        // ── Toast ────────────────────────────────────────────────────────────
-        function showToast(msg, type = 'success') {
-            const t = document.getElementById('toast');
-            t.textContent = msg; t.className = `toast ${type} show`;
-            clearTimeout(t._timer);
-            t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+        // ── Player list ──────────────────────────────────────────────────────
+        function renderPlayerList(players) {
+            const list  = document.getElementById('playerList');
+            const count = document.getElementById('playerCount');
+            count.textContent = players.length;
+            if (players.length === 0) {
+                list.innerHTML = '<div class="empty-state"><p>🎮</p><p>No players currently whitelisted</p></div>';
+                return;
+            }
+            list.innerHTML = players.map(p => `
+                <div class="player-card" id="card-${escapeHtml(p.username)}">
+                    <div class="player-info">
+                        <div class="player-name">${escapeHtml(p.username)}</div>
+                        <div class="player-meta">
+                            <span class="countdown" data-expires="${p.expires_at}"></span>
+                            <span class="sep">·</span>
+                            <span>expires ${escapeHtml(p.expires_str)}</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-danger" onclick="removePlayer('${escapeHtml(p.username)}')">Remove</button>
+                </div>`).join('');
+            updateCountdowns();
         }
 
-        // ── Auth headers ─────────────────────────────────────────────────────
-        function authHeaders(extra = {}) {
-            const h = { 'Content-Type': 'application/json', ...extra };
-            if (SECRET_TOKEN) h['Authorization'] = 'Bearer ' + SECRET_TOKEN;
-            return h;
+        async function refreshPlayers() {
+            try {
+                const res  = await fetch('/whitelist', { headers: authHeaders() });
+                const data = await res.json();
+                if (res.ok) renderPlayerList(data.players);
+            } catch {}
+        }
+
+        let playerPollTimer = null;
+        function startPlayerPolling() { playerPollTimer = setInterval(refreshPlayers, 8000); }
+        function stopPlayerPolling()  { clearInterval(playerPollTimer); }
+
+        // ── Tabs ─────────────────────────────────────────────────────────────
+        function activateTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            const tab = document.querySelector(`.tab[data-tab="${name}"]`);
+            if (!tab) return;
+            tab.classList.add('active');
+            document.getElementById('panel-' + name).classList.add('active');
+            sessionStorage.setItem('activeTab', name);
+        }
+        document.querySelectorAll('.tab').forEach(t =>
+            t.addEventListener('click', () => {
+                const going = t.dataset.tab;
+                if (going === 'players') {
+                    onSettingsTabClose();
+                    startPlayerPolling();
+                } else {
+                    stopPlayerPolling();
+                    onSettingsTabOpen();
+                }
+                activateTab(going);
+            }));
+
+        const savedTab = sessionStorage.getItem('activeTab') || 'players';
+        activateTab(savedTab);
+        if (savedTab === 'settings') onSettingsTabOpen();
+        else startPlayerPolling();
+
+        // Handle post-OAuth redirect params
+        const params = new URLSearchParams(location.search);
+        if (params.get('twitch') === 'connected') {
+            showToast('Twitch connected!', 'success');
+            activateTab('settings');
+            stopPlayerPolling();
+            onSettingsTabOpen();
+            history.replaceState({}, '', '/');
+            if (TWITCH_STATUS === 'connected') loadRewards();
+        } else if (params.get('twitch') === 'error') {
+            showToast('Twitch authorisation failed', 'error');
+            activateTab('settings');
+            stopPlayerPolling();
+            onSettingsTabOpen();
+            history.replaceState({}, '', '/');
+        }
+
+        if (TWITCH_STATUS === 'connected') loadRewards();
+
+        // ── AMP status ───────────────────────────────────────────────────────
+        async function checkAmpStatus() {
+            try {
+                const res  = await fetch('/amp/status');
+                const data = await res.json();
+                const label = data.status === 'connected'  ? (data.module ? `Connected · ${data.module}` : 'Connected')
+                    : data.status === 'wrong_url'          ? 'ADS panel — click Load to pick instance'
+                    : data.reason === 'auth_failed'        ? 'Wrong credentials'
+                    : data.reason === 'command_error'      ? 'AMP error — use direct instance URL'
+                    : 'Unreachable';
+                setBadge('ampBadge', data.status === 'connected' ? 'connected' : 'error', label);
+                if (data.status === 'wrong_url') showToast(data.message, 'error');
+            } catch {
+                setBadge('ampBadge', 'error', 'Unreachable');
+            }
+        }
+
+        async function loadAmpInstances(btn) {
+            btn.disabled = true; btn.textContent = 'Loading…';
+            try {
+                const res  = await fetch('/amp/instances');
+                const data = await res.json();
+                if (data.status !== 'ok') { showToast(data.message || 'Failed to load instances', 'error'); return; }
+                if (!data.instances.length) { showToast('No instances found — check ADS URL and credentials', 'error'); return; }
+
+                const list = document.getElementById('amp-instance-list');
+                list.innerHTML = '';
+                data.instances.forEach((inst, i) => {
+                    const row = document.createElement('div');
+                    const borderBottom = i < data.instances.length - 1 ? '1px solid var(--border)' : 'none';
+                    row.style.cssText = `display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.75rem;background:var(--surface);border-bottom:${borderBottom}`;
+                    if (inst.module === 'ADS') {
+                        row.innerHTML = `<span style="flex:1;font-size:0.85rem;color:var(--text-muted)">${escapeHtml(inst.name)} <em>(ADS panel — not selectable)</em></span>`;
+                    } else {
+                        const dot = inst.running
+                            ? `<span style="color:var(--success);font-size:0.6rem">&#9679;</span>`
+                            : `<span style="color:var(--danger);font-size:0.6rem">&#9679;</span>`;
+                        row.innerHTML = `
+                            ${dot}
+                            <span style="flex:1;font-size:0.85rem"><strong>${escapeHtml(inst.name)}</strong> <span style="color:var(--text-muted);font-size:0.8rem">${escapeHtml(inst.module)}</span></span>
+                            <code style="font-size:0.75rem;color:var(--text-muted)">${escapeHtml(inst.url)}</code>
+                            <button type="button" class="btn btn-ghost" style="padding:0.2rem 0.6rem;font-size:0.8rem"
+                                    onclick="selectAmpInstance(${JSON.stringify(inst.instance_id)}, ${JSON.stringify(inst.name)})">Use</button>`;
+                    }
+                    list.appendChild(row);
+                });
+                list.style.display = 'block';
+            } catch (e) {
+                showToast('Failed to load instances: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Load';
+            }
+        }
+
+        function selectAmpInstance(instanceId, name) {
+            document.getElementById('s-amp-instance').value = instanceId;
+            document.getElementById('amp-instance-label').textContent = `Using ${name} via ADS proxy`;
+            document.getElementById('amp-instance-list').style.display = 'none';
+            showToast(`Instance set to ${name}`, 'ok');
+        }
+
+        // ── Twitch status ─────────────────────────────────────────────────────
+        async function checkTwitchStatus() {
+            try {
+                const res  = await fetch('/twitch/status');
+                const data = await res.json();
+                const labels = { connected: 'Connected', disconnected: 'Not connected',
+                                 error: 'Error', reconnecting: 'Reconnecting…', connecting: 'Connecting…' };
+                setBadge('twitchBadge', data.status in labels ? data.status : 'disconnected',
+                         labels[data.status] || data.status);
+                const pill = document.getElementById('twitchPill');
+                if (pill) {
+                    pill.className = 'twitch-pill ' + data.status;
+                    const lbl = document.getElementById('twitchPillLabel');
+                    if (lbl) lbl.textContent = data.status === 'connected'
+                        ? (data.channel_name || 'Twitch')
+                        : (labels[data.status] || data.status);
+                }
+            } catch {}
+        }
+
+        let twitchPollTimer = null;
+        function onSettingsTabOpen() {
+            checkAmpStatus();
+            checkTwitchStatus();
+            twitchPollTimer = setInterval(checkTwitchStatus, 5000);
+        }
+        function onSettingsTabClose() {
+            clearInterval(twitchPollTimer);
         }
 
         // ── Add player ───────────────────────────────────────────────────────
@@ -689,25 +866,26 @@
             const btn   = document.getElementById('addBtn');
             const username = input.value.trim();
             if (!username) return;
+            const hours   = parseInt(document.getElementById('addHours').value) || 0;
+            const minutes = parseInt(document.getElementById('addMinutes').value) || 0;
+            const durationSeconds = (hours * 3600) + (minutes * 60);
+            if (durationSeconds < 60) { showToast('Duration must be at least 1 minute', 'error'); return; }
             btn.disabled = true; btn.textContent = 'Adding…';
             try {
                 const res  = await fetch('/whitelist', {
                     method: 'POST', headers: authHeaders(),
-                    body: JSON.stringify({ username }),
+                    body: JSON.stringify({ username, duration_seconds: durationSeconds }),
                 });
                 const data = await res.json();
                 if (res.ok) {
                     showToast(`${username} whitelisted`);
                     input.value = '';
-                    setTimeout(() => location.reload(), 400);
+                    await refreshPlayers();
                 } else {
                     showToast(data.message || 'Error', 'error');
                 }
             } catch { showToast('Network error', 'error'); }
-            finally {
-                btn.disabled = false;
-                btn.textContent = 'Add ({{ duration_hours }}h)';
-            }
+            finally { btn.disabled = false; btn.textContent = 'Add'; }
         });
 
         // ── Remove player ────────────────────────────────────────────────────
@@ -716,13 +894,8 @@
                 const res = await fetch(`/whitelist/${encodeURIComponent(username)}`,
                     { method: 'DELETE', headers: authHeaders() });
                 if (res.ok) {
-                    document.getElementById(`card-${username}`)?.remove();
-                    const count = document.querySelectorAll('.player-card').length;
-                    document.getElementById('playerCount').textContent = count;
-                    if (count === 0)
-                        document.getElementById('playerList').innerHTML =
-                            '<div class="empty-state"><p>🎮</p><p>No players currently whitelisted</p></div>';
                     showToast(`${username} removed`);
+                    await refreshPlayers();
                 } else { showToast('Failed to remove', 'error'); }
             } catch { showToast('Network error', 'error'); }
         }
@@ -730,12 +903,12 @@
         // ── Toggle password visibility ────────────────────────────────────────
         function togglePass(id, btn) {
             const input = document.getElementById(id);
-            const show = input.type === 'password';
-            input.type = show ? 'text' : 'password';
+            const show  = input.type === 'password';
+            input.type  = show ? 'text' : 'password';
             btn.textContent = show ? 'Hide' : 'Show';
         }
 
-        // ── Load Twitch rewards ──────────────────────────────────────────────
+        // ── Load Twitch rewards ───────────────────────────────────────────────
         async function loadRewards() {
             const sel = document.getElementById('s-reward');
             const btn = document.getElementById('loadRewardsBtn');
@@ -757,35 +930,29 @@
                     showToast(data.message || 'Could not load rewards', 'error');
                 }
             } catch { showToast('Network error', 'error'); }
-            finally {
-                if (btn) { btn.disabled = false; btn.textContent = 'Load'; }
-            }
+            finally { if (btn) { btn.disabled = false; btn.textContent = 'Load'; } }
         }
 
-        // ── Authorize Twitch ────────────────────────────────────────────────
+        // ── Authorize Twitch ──────────────────────────────────────────────────
         async function authorizeTwitch() {
             const clientId     = document.getElementById('s-twitch-id').value.trim();
             const clientSecret = document.getElementById('s-twitch-secret').value.trim();
             const channelName  = document.getElementById('s-twitch-channel').value.trim();
-
             if (!clientId || !clientSecret || !channelName) {
                 showToast('Fill in Client ID, Client Secret and Channel Name first', 'error');
                 return;
             }
             const btn = document.getElementById('authorizeBtn');
             btn.disabled = true; btn.textContent = 'Redirecting…';
-
             try {
                 const res  = await fetch('/twitch/auth', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_id: clientId, client_secret: clientSecret,
                                           channel_name: channelName }),
                 });
                 const data = await res.json();
-                if (res.ok) {
-                    window.location.href = data.auth_url;
-                } else {
+                if (res.ok) { window.location.href = data.auth_url; }
+                else {
                     showToast(data.message || 'Error', 'error');
                     btn.disabled = false; btn.textContent = 'Authorize with Twitch';
                 }
@@ -795,14 +962,12 @@
             }
         }
 
-        // ── Disconnect Twitch ────────────────────────────────────────────────
+        // ── Disconnect Twitch ─────────────────────────────────────────────────
         async function disconnectTwitch() {
             try {
                 const res = await fetch('/twitch/disconnect', { method: 'POST' });
-                if (res.ok) {
-                    showToast('Twitch disconnected');
-                    setTimeout(() => location.reload(), 600);
-                } else { showToast('Failed to disconnect', 'error'); }
+                if (res.ok) { showToast('Twitch disconnected'); setTimeout(() => location.reload(), 600); }
+                else { showToast('Failed to disconnect', 'error'); }
             } catch { showToast('Network error', 'error'); }
         }
 
@@ -811,16 +976,18 @@
             e.preventDefault();
             const btn = document.getElementById('saveBtn');
             btn.disabled = true; btn.textContent = 'Saving…';
-
-            const durationHours = parseFloat(document.getElementById('s-duration').value) || 2;
+            const durationH = parseInt(document.getElementById('s-duration-h').value) || 0;
+            const durationM = parseInt(document.getElementById('s-duration-m').value) || 0;
+            const durationSeconds = (durationH * 3600) + (durationM * 60) || 7200;
             const payload = {
                 amp: {
-                    url:      document.getElementById('s-amp-url').value.trim(),
-                    username: document.getElementById('s-amp-user').value.trim(),
-                    password: document.getElementById('s-amp-pass').value,
+                    url:         document.getElementById('s-amp-url').value.trim(),
+                    username:    document.getElementById('s-amp-user').value.trim(),
+                    password:    document.getElementById('s-amp-pass').value,
+                    instance_id: document.getElementById('s-amp-instance').value,
                 },
                 service: {
-                    whitelist_duration_seconds:    Math.round(durationHours * 3600),
+                    whitelist_duration_seconds:    durationSeconds,
                     expiry_check_interval_seconds: parseInt(document.getElementById('s-interval').value) || 60,
                     secret_token: document.getElementById('s-token').value,
                 },
@@ -835,14 +1002,13 @@
                     reward_id:     document.getElementById('s-reward').value,
                 },
             };
-
             try {
                 const res  = await fetch('/settings', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
                 const data = await res.json();
-                if (res.ok) { showToast('Settings saved'); }
+                if (res.ok) { showToast('Settings saved'); checkAmpStatus(); }
                 else { showToast(data.message || 'Save failed', 'error'); }
             } catch { showToast('Network error', 'error'); }
             finally { btn.disabled = false; btn.textContent = 'Save Settings'; }

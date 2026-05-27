@@ -45,8 +45,9 @@ The Docker image is built and published automatically to GitHub Container Regist
 **1. Create the config file:**
 
 In the Unraid web UI, go to **Files** and navigate to `/mnt/user/appdata/`. Create a new folder called `whitelister`, then inside it create a file called `config.yaml`. Paste in the contents from [config.yaml](config.yaml) in this repo and update at minimum:
-- `amp.url` — your AMP instance URL for the Minecraft server (e.g. `http://192.168.1.50:8080`)
+- `amp.url` — your AMP **ADS panel** URL (e.g. `http://192.168.1.50:8080`)
 - `amp.username` / `amp.password` — your AMP credentials
+- Leave `amp.instance_id` blank for now — you'll set it via the dashboard after the container starts
 
 **2. Add the container:**
 
@@ -61,9 +62,11 @@ Go to **Docker** and click **Add Container**. Fill in:
 
 Click **Apply**. Unraid will pull the image and start the container.
 
-**3. Connect Twitch via the dashboard:**
+**3. Configure AMP and connect Twitch via the dashboard:**
 
-Open `http://<Unraid-IP>:8765` in your browser and follow the Twitch setup flow. You'll need your Twitch app's client ID and secret — set the OAuth Redirect URL in your Twitch app to `http://<Unraid-IP>:8765/twitch/callback`.
+Open `http://<Unraid-IP>:8765` in your browser. Go to **Settings → AMP Connection**, click **Load**, then click **Use** next to your Minecraft instance. This fills in the instance ID so commands are routed to the right server. Click **Save**.
+
+Then follow the Twitch setup flow in **Settings → Twitch Integration**. You'll need your Twitch app's client ID and secret — set the OAuth Redirect URL in your Twitch app to `http://<Unraid-IP>:8765/twitch/callback`.
 
 ## Configuration
 
@@ -71,9 +74,10 @@ Open `http://<Unraid-IP>:8765` in your browser and follow the Twitch setup flow.
 
 ```yaml
 amp:
-  url: "http://192.168.1.x:8080"  # AMP instance URL for the Minecraft server
+  url: "http://192.168.1.x:8080"  # AMP ADS panel URL
   username: "admin"
   password: "changeme"
+  instance_id: ""  # Set via the dashboard Load button — don't edit manually
 
 service:
   whitelist_duration_seconds: 7200   # 2 hours
@@ -164,6 +168,6 @@ service:
 - All shared state is created in `create_app()` and passed explicitly — no module-level globals.
 - Two locks: `db_lock` serialises SQLite writes; `AMPClient._lock` serialises AMP session refresh.
 - SQLite uses WAL mode so the expiry thread and request handlers don't block each other.
-- AMP auth is session-based (`SESSIONID` body parameter on every request). The client auto-re-authenticates on session expiry.
+- AMP auth is session-based (`SESSIONID` body parameter on every request). When routing through the ADS proxy, a two-step login is performed: once on the ADS panel, then again on the sub-instance through the proxy. Both sessions are refreshed automatically on expiry.
 - The Twitch EventSub client auto-reconnects with exponential backoff and refreshes tokens on 401.
 - If AMP fails during expiry removal, the entry stays in SQLite and is retried next cycle.

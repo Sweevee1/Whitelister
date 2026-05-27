@@ -72,6 +72,7 @@ def create_app(config_path: str = None) -> Flask:
         base_url=config["amp"]["url"],
         username=config["amp"]["username"],
         password=config["amp"]["password"],
+        instance_id=config["amp"].get("instance_id", ""),
     )
     secret_token: str = config["service"].get("secret_token", "") or ""
     duration: int = int(config["service"]["whitelist_duration_seconds"])
@@ -184,14 +185,38 @@ def create_app(config_path: str = None) -> Flask:
     @app.route("/amp/status")
     def amp_status():
         try:
-            amp.ensure_session()
-            return jsonify({"status": "connected"})
+            data = amp.get_status()
+            module = data.get("Module") or data.get("ModuleName")
+            state = data.get("State")
+            logger.debug("AMP status raw response: %s", data)
+            if not module and not amp._instance_id:
+                return jsonify({
+                    "status": "wrong_url",
+                    "message": "Connected to AMP but this looks like the ADS panel. "
+                               "Go to Settings → AMP Connection, click Load, then click "
+                               "Use next to your Minecraft instance.",
+                })
+            return jsonify({"status": "connected", "module": module or "unknown", "state": state})
         except AMPAuthError as e:
             msg = str(e)
             reason = "unreachable" if "request failed" in msg else "auth_failed"
             return jsonify({"status": "error", "reason": reason, "message": msg})
+        except AMPCommandError as e:
+            return jsonify({"status": "error", "reason": "command_error", "message": str(e)})
         except Exception as e:
             return jsonify({"status": "error", "reason": "unreachable", "message": str(e)})
+
+    @app.route("/amp/instances")
+    def amp_instances():
+        try:
+            instances = amp.get_instances()
+            return jsonify({"status": "ok", "instances": instances})
+        except AMPAuthError as e:
+            return jsonify({"status": "error", "message": str(e)}), 503
+        except AMPCommandError as e:
+            return jsonify({"status": "error", "message": str(e)}), 503
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 503
 
     # ── Settings ─────────────────────────────────────────────────────────────
 
@@ -223,7 +248,18 @@ def create_app(config_path: str = None) -> Flask:
         with open(config_path) as f:
             existing = yaml.safe_load(f)
 
+        old_password = existing.get("amp", {}).get("password", "")
         existing["amp"] = data["amp"]
+
+        # Hot-reload AMP client so changes take effect immediately without a restart
+        amp_cfg = data["amp"]
+        amp.reconfigure(
+            base_url=amp_cfg["url"],
+            username=amp_cfg["username"],
+            password=amp_cfg.get("password") or old_password,
+            instance_id=amp_cfg.get("instance_id", ""),
+        )
+
         existing["service"] = data["service"]
         if "logging" in data:
             existing["logging"] = data["logging"]
@@ -245,6 +281,23 @@ def create_app(config_path: str = None) -> Flask:
         return jsonify({"status": "ok"})
 
     # ── Whitelist API ─────────────────────────────────────────────────────────
+
+    @app.route("/whitelist", methods=["GET"])
+    def list_whitelist():
+        now = int(time.time())
+        with db_lock:
+            entries = get_all_entries(conn)
+        players = []
+        for username, _, expires_at in entries:
+            if expires_at > now:
+                dt = datetime.fromtimestamp(expires_at, tz=timezone.utc)
+                players.append({
+                    "username": username,
+                    "expires_at": expires_at,
+                    "expires_str": f"{dt.hour}:{dt.minute:02d} UTC",
+                })
+        players.sort(key=lambda p: p["expires_at"])
+        return jsonify({"players": players})
 
     @app.route("/whitelist", methods=["POST"])
     def add_to_whitelist():
@@ -271,7 +324,17 @@ def create_app(config_path: str = None) -> Flask:
             return jsonify({"status": "error", "message": "AMP unreachable"}), 503
 
         now = int(time.time())
-        expires_at = now + duration
+        custom_dur = data.get("duration_seconds")
+        if custom_dur is not None:
+            try:
+                custom_dur = int(custom_dur)
+                if custom_dur < 60:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return jsonify({"status": "error", "message": "duration_seconds must be at least 60"}), 400
+            expires_at = now + custom_dur
+        else:
+            expires_at = now + duration
         with db_lock:
             upsert_entry(conn, username, now, expires_at)
 

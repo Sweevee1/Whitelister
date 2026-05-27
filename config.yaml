@@ -1,8 +1,13 @@
 amp:
-  # AMP panel URL. Use the Debian VM's LAN IP (e.g. http://192.168.1.x:8080).
+  # AMP panel URL — either the ADS panel URL (e.g. http://192.168.1.x:8080)
+  # or the direct instance URL if you know the port.
   url: "http://192.168.1.x:8080"
   username: "admin"
   password: "changeme"
+  # Instance ID of the Minecraft server within ADS. Use the dashboard's
+  # AMP Connection section to load available instances and pick the right one.
+  # Leave empty if amp.url points directly at the instance (not the ADS panel).
+  instance_id: ""
 
 service:
   host: "0.0.0.0"
