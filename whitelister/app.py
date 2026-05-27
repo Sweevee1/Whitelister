@@ -383,8 +383,11 @@ def create_app(config_path: str = None) -> Flask:
 
     # ── Twitch OAuth + EventSub ───────────────────────────────────────────────
 
-    @app.route("/twitch/auth", methods=["POST"])
+    @app.route("/twitch/auth", methods=["GET", "POST"])
     def twitch_auth():
+        if request.method == "GET":
+            from flask import redirect as _redir, url_for as _url_for
+            return _redir(_url_for("twitch_callback", **request.args))
         data = request.get_json(silent=True) or {}
         client_id = data.get("client_id", "").strip()
         client_secret = data.get("client_secret", "").strip()
