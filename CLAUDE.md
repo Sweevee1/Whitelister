@@ -8,19 +8,16 @@ A Python Flask service that runs as a Docker container on Unraid. Twitch viewers
 
 ## Running locally (development)
 
-```bash
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt  # or venv\Scripts\pip on Windows
+On Windows (PowerShell) — always use PowerShell, not bash. Bash `kill` doesn't cleanly terminate the Windows Python process and multiple instances will stack up on port 8765.
 
-# Uses config.dev.yaml (local dev config with real AMP IP + credentials)
-CONFIG_PATH=config.dev.yaml venv/bin/flask --app "whitelister.app:create_app()" run --port 8765
-```
-
-On Windows (PowerShell):
 ```powershell
 $env:CONFIG_PATH="config.dev.yaml"
 venv\Scripts\flask --app "whitelister.app:create_app()" run --port 8765
 ```
+
+Kill stale processes: `netstat -ano | findstr ":8765"` then `Stop-Process -Id <PID> -Force`.
+
+The dev server runs plain HTTP on port 8765. The redirect URI for Twitch OAuth when testing locally is `http://localhost:8765/twitch/auth` (see Twitch section).
 
 To test expiry quickly, set `whitelist_duration_seconds: 10` and `expiry_check_interval_seconds: 5` in the dev config.
 
@@ -32,6 +29,15 @@ docker compose up -d --build
 ```
 
 The container mounts `/mnt/user/appdata/whitelister` as `/config` inside the container. Config path defaults to `/config/config.yaml` via `CONFIG_PATH` env var set in the Dockerfile.
+
+**Port topology inside the container:**
+- `0.0.0.0:8764` — Python HTTP server (redirects all traffic to HTTPS on 8765)
+- `0.0.0.0:8765` — `proxy.py` dual-protocol listener (public)
+  - TLS ClientHello (`0x16`) → raw tunnel to gunicorn on `127.0.0.1:8766`
+  - plain HTTP → 301 redirect to `https://host:8765/`
+- `127.0.0.1:8766` — gunicorn (HTTPS, internal only)
+
+A self-signed TLS cert is generated on first boot and stored in `/config/cert.pem` + `/config/key.pem` (persists across container restarts). The browser will show a certificate warning on first visit — click through to accept.
 
 ## Architecture
 
@@ -58,6 +64,7 @@ All shared state lives in `create_app()` in `app.py` and is passed explicitly �
 - `twitch_client.py` — Twitch EventSub WebSocket client, OAuth helpers (`build_auth_url`, `exchange_code`, `get_broadcaster_id`, `get_rewards`)
 - `database.py` — SQLite with WAL mode; `upsert_entry`, `get_expired_entries`, `delete_entry`, `get_all_entries`
 - `scheduler.py` — background expiry thread
+- `proxy.py` — dual-protocol TCP proxy on port 8765; sniffs first byte to distinguish TLS from plain HTTP
 
 ## AMP API
 
@@ -79,7 +86,17 @@ Only the sub-instance session is accepted for proxied commands. Passing the ADS 
 
 Uses EventSub WebSocket transport — no public HTTPS endpoint required.
 
-OAuth flow: `POST /twitch/auth` saves credentials + redirects to Twitch → `GET /twitch/callback` exchanges the code for tokens + broadcaster ID + starts the client. Tokens are saved back to `config.yaml` automatically. The client auto-reconnects with exponential backoff and refreshes tokens on 401.
+**OAuth flow:**
+1. Dashboard POSTs credentials to `POST /twitch/auth` → app saves them + returns `auth_url`
+2. Browser opens `auth_url` (Twitch OAuth page)
+3. Twitch redirects back to the app's redirect URI with a `code`
+4. `GET /twitch/callback` exchanges the code for tokens, fetches broadcaster ID, starts the EventSub client, saves tokens to `config.yaml`
+
+**Redirect URI.** The app auto-detects the redirect URI from `request.url_root` as `<scheme>://<host>/twitch/callback`. Leave the Redirect URI field blank in the dashboard and it will be set correctly. For production this resolves to `https://<Unraid-IP>:8765/twitch/callback` — **register this exact URI in your Twitch app at dev.twitch.tv**.
+
+**`/twitch/auth` GET handler.** If the Twitch developer console has `/twitch/auth` registered instead of `/twitch/callback`, `GET /twitch/auth` transparently redirects to `/twitch/callback` preserving all query params. This is a known quirk of this app's setup.
+
+**Token refresh.** The client auto-reconnects with exponential backoff and refreshes tokens on 401.
 
 `reward_id` in config filters events to a specific channel points reward. Leave empty to respond to all redemptions.
 
@@ -96,7 +113,7 @@ OAuth flow: `POST /twitch/auth` saves credentials + redirects to Twitch → `GET
 | POST | `/settings` | Save config; hot-reloads AMPClient immediately (no restart needed) |
 | GET | `/amp/status` | Test AMP connectivity; returns `status`, `module`, `state` |
 | GET | `/amp/instances` | List ADS instances with `instance_id`, `name`, `module`, `running`, `url`, `port` |
-| POST | `/twitch/auth` | Save Twitch credentials + return OAuth URL |
+| GET, POST | `/twitch/auth` | POST: save credentials + return OAuth URL. GET: redirect to `/twitch/callback` (handles misregistered redirect URI) |
 | GET | `/twitch/callback` | OAuth callback — exchanges code, starts client |
 | GET | `/twitch/status` | Current EventSub connection status |
 | GET | `/twitch/rewards` | List channel point rewards (requires connected) |
@@ -111,8 +128,6 @@ Single-file template at `whitelister/templates/index.html`. Dark grey theme (`--
 **Settings panel** — Whitelist Duration is split into separate `h` and `m` inputs (`s-duration-h`, `s-duration-m`). The settings form has `autocomplete="off"` to suppress browser HTTP password-autofill warnings. Settings save hot-reloads AMPClient via `amp.reconfigure()` — interval and logging changes still require a restart.
 
 **AMP Connection section** — has a **Load** button that calls `GET /amp/instances` and renders a picker. Clicking **Use** next to an instance writes its GUID into the hidden `s-amp-instance` input (the ADS proxy approach). The AMP URL field stays unchanged.
-
-**Running the dev server** — always use PowerShell (not bash) to start Flask on Windows, otherwise the Windows Python process won't be killed cleanly by bash `kill` and multiple instances will stack up on port 8765. Kill stale processes with: `netstat -ano | findstr ":8765"` then `Stop-Process -Id <PID> -Force`.
 
 ## Key constraint
 
