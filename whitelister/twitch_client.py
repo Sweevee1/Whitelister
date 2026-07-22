@@ -16,13 +16,13 @@ HELIX = "https://api.twitch.tv/helix"
 
 class TwitchEventSubClient:
     def __init__(self, *, client_id, client_secret, access_token, refresh_token,
-                 broadcaster_id, reward_id, on_redemption, on_token_refresh):
+                 broadcaster_id, rewards, on_redemption, on_token_refresh):
         self._client_id = client_id
         self._client_secret = client_secret
         self._access_token = access_token
         self._refresh_token = refresh_token
         self._broadcaster_id = broadcaster_id
-        self._reward_id = reward_id or ""
+        self._rewards = dict(rewards or {})  # reward_id -> gamemode
         self._on_redemption = on_redemption
         self._on_token_refresh = on_token_refresh
         self._status = "connecting"
@@ -41,8 +41,8 @@ class TwitchEventSubClient:
     def status(self):
         return self._status
 
-    def set_reward_id(self, reward_id):
-        self._reward_id = reward_id or ""
+    def set_rewards(self, rewards):
+        self._rewards = dict(rewards or {})
 
     # ── Internal loop ──────────────────────────────────────────────────────
 
@@ -118,12 +118,16 @@ class TwitchEventSubClient:
     def _handle_notification(self, payload):
         event = payload.get("event", {})
         reward_id = event.get("reward", {}).get("id", "")
-        if self._reward_id and reward_id != self._reward_id:
-            return
+        gamemode = None
+        if self._rewards:
+            if reward_id not in self._rewards:
+                return
+            gamemode = self._rewards[reward_id]
         username = event.get("user_input", "").strip()
         if username:
-            logger.info("Redemption received for: %s", username)
-            self._on_redemption(username)
+            logger.info("Redemption received for: %s (reward=%s, gamemode=%s)",
+                        username, reward_id, gamemode)
+            self._on_redemption(username, gamemode)
 
     # ── API helpers ─────────────────────────────────────────────────────────
 

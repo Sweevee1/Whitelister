@@ -43,15 +43,18 @@ A self-signed TLS cert is generated on first boot and stored in `/config/cert.pe
 
 All shared state lives in `create_app()` in `app.py` and is passed explicitly — no module-level globals.
 
-**Concurrent writers share two locks:**
+**Concurrent writers share three locks:**
 - `db_lock: threading.Lock` — serialises all SQLite writes (request handler + expiry thread).
+- `pending_lock: threading.Lock` — guards the in-memory `pending_gamemodes` dict (username → `(gamemode, redeemed_at)`) shared between `_whitelist_player()` and the gamemode watcher thread.
 - `AMPClient._lock: threading.Lock` — serialises AMP session refresh only.
 
 **Request flow:** `POST /whitelist` → validate username regex → `AMPClient.whitelist_add()` → `upsert_entry()` in SQLite → return JSON. Accepts optional `duration_seconds` body field to override the config default for that specific add.
 
-**Twitch redemption flow:** `_whitelist_player()` is called by the EventSub client — uses the config default duration only (no per-redemption override).
+**Twitch redemption flow:** `_whitelist_player(username, gamemode=None)` is called by the EventSub client — uses the config default duration only (no per-redemption duration override). If the matched reward carries a `gamemode`, the player is queued in `pending_gamemodes` rather than having `/gamemode` fired immediately — see "Gamemode-on-join" below for why.
 
-**Twitch flow:** `TwitchEventSubClient` background thread (in `twitch_client.py`) maintains a WebSocket connection to Twitch EventSub. On a channel points redemption, it calls `_whitelist_player()` directly — the same helper used by the HTTP endpoint.
+**Twitch flow:** `TwitchEventSubClient` background thread (in `twitch_client.py`) maintains a WebSocket connection to Twitch EventSub, subscribed broadcaster-wide (Twitch's `condition` has no server-side reward filter). On any channel points redemption it looks up the reward id in its `rewards: dict[reward_id, gamemode]` map — matching against a specific set only if the map is non-empty — and calls `_whitelist_player(username, gamemode)`, the same helper used by the HTTP endpoint.
+
+**Gamemode-on-join flow:** a player can never be online at the moment they redeem (redemption is what grants them whitelist access), so `/gamemode` can't be applied synchronously. Instead `gamemode_watcher.py` runs a daemon thread (`GAMEMODE_POLL_INTERVAL_SECONDS = 5`, independent of the expiry cadence) that polls `AMPClient.get_console_updates()` (AMP's `Core/GetUpdates`) for the standard Minecraft `"<name> joined the game"` log line. When a joining player matches an entry in `pending_gamemodes`, it calls `AMPClient.set_gamemode()` and clears the entry. Stale entries (never joined before `whitelist_duration_seconds` elapses) are purged each tick. This thread only starts once the Twitch client starts, since pending gamemodes only originate from Twitch redemptions.
 
 **Expiry flow:** daemon thread wakes every N seconds → `get_expired_entries()` → `AMPClient.whitelist_remove()` per entry → `delete_entry()`. Failed removals stay in DB and are retried next cycle.
 
@@ -60,10 +63,11 @@ All shared state lives in `create_app()` in `app.py` and is passed explicitly �
 ## Modules
 
 - `app.py` — Flask app factory, all routes, shared helpers `_whitelist_player()` and `_save_twitch_tokens()`
-- `amp_client.py` — AMP session auth + `whitelist add/remove` via `Core/SendConsoleMessage`
+- `amp_client.py` — AMP session auth + `whitelist add/remove`/`set_gamemode` via `Core/SendConsoleMessage`, `get_console_updates()` via `Core/GetUpdates`
 - `twitch_client.py` — Twitch EventSub WebSocket client, OAuth helpers (`build_auth_url`, `exchange_code`, `get_broadcaster_id`, `get_rewards`)
 - `database.py` — SQLite with WAL mode; `upsert_entry`, `get_expired_entries`, `delete_entry`, `get_all_entries`
 - `scheduler.py` — background expiry thread
+- `gamemode_watcher.py` — background thread that polls AMP console output for player joins and applies queued gamemodes (see "Gamemode-on-join flow" above)
 - `proxy.py` — dual-protocol TCP proxy on port 8765; sniffs first byte to distinguish TLS from plain HTTP
 
 ## AMP API
@@ -98,7 +102,7 @@ Uses EventSub WebSocket transport — no public HTTPS endpoint required.
 
 **Token refresh.** The client auto-reconnects with exponential backoff and refreshes tokens on 401.
 
-`reward_id` in config filters events to a specific channel points reward. Leave empty to respond to all redemptions.
+`twitch.rewards` in config is a list of `{reward_id, title, gamemode}` — connect one or more channel point rewards, each triggering a different Minecraft gamemode (`survival`/`creative`/`adventure`/`spectator`) on redemption. Leave the list empty to respond to all redemptions with no gamemode change (legacy behavior). Managed via the dashboard's Settings → Twitch Integration → Channel Point Rewards section (a "Load Rewards" picker + per-row remove, modeled on the AMP Instance picker). A legacy single `reward_id` string from older configs is migrated in-place on startup into a single-entry `rewards` list.
 
 ## Dashboard routes
 

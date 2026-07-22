@@ -6,6 +6,8 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+GAMEMODES = {"survival", "creative", "adventure", "spectator"}
+
 
 class AMPAuthError(Exception):
     pass
@@ -179,6 +181,19 @@ class AMPClient:
             raise AMPCommandError(f"AMP API error: {data.get('Message') or data.get('Title')}")
         return data
 
+    def get_console_updates(self) -> list:
+        """Return new console log entries since the last call (AMP's Core/GetUpdates)."""
+        resp = self._call("Core/GetUpdates")
+        if resp.status_code not in (200, 204):
+            raise AMPCommandError(f"AMP returned HTTP {resp.status_code}")
+        data = resp.json()
+        if isinstance(data, dict) and data.get("Title"):
+            raise AMPCommandError(f"AMP API error: {data.get('Message') or data.get('Title')}")
+        entries = data.get("ConsoleEntries", []) if isinstance(data, dict) else []
+        if entries:
+            logger.debug("Core/GetUpdates console entries: %s", entries)
+        return entries
+
     def get_instances(self) -> list:
         """Return the list of instances from the ADS panel (always direct, never proxied)."""
         resp = self._call("ADSModule/GetInstances", direct=True)
@@ -225,3 +240,8 @@ class AMPClient:
 
     def whitelist_remove(self, username: str) -> None:
         self.send_console_command(f"whitelist remove {username}")
+
+    def set_gamemode(self, username: str, gamemode: str) -> None:
+        if gamemode not in GAMEMODES:
+            raise ValueError(f"Invalid gamemode: {gamemode!r}")
+        self.send_console_command(f"gamemode {gamemode} {username}")

@@ -27,7 +27,16 @@ twitch:
   client_id: ""
   client_secret: ""
   channel_name: ""   # Your Twitch username (lowercase)
-  reward_id: ""      # Leave empty to trigger on any redemption
+  # Connect one or more channel point rewards, each with its own Minecraft gamemode
+  # (survival/creative/adventure/spectator) applied once the redeemer joins the server.
+  # Managed via the dashboard's Settings -> Twitch Integration -> Channel Point Rewards
+  # section. Leave empty to whitelist on any redemption (no gamemode change).
+  rewards: []
+  # Example:
+  # rewards:
+  #   - reward_id: "abc123"
+  #     title: "Whitelist Me - Survival"
+  #     gamemode: survival
 
   # Set automatically by the dashboard OAuth flow — do not edit manually
   access_token: ""

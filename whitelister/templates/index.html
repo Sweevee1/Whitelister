@@ -555,18 +555,20 @@
                                    value="{{ config.twitch.channel_name if config.twitch is defined else '' }}">
                         </div>
                         <div class="field">
-                            <label for="s-reward">Channel Points Reward</label>
+                            <label>Channel Point Rewards</label>
+                            <div id="reward-rows" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:0.5rem"></div>
                             <div class="input-with-btn">
-                                <select id="s-reward" {% if twitch_status != 'connected' %}disabled{% endif %}>
-                                    <option value="">── Any redemption ──</option>
-                                </select>
+                                <span id="reward-picker-label" style="flex:1;font-size:0.85rem;color:var(--text-muted)">
+                                    Load your channel point rewards to add one.
+                                </span>
                                 <button type="button" class="btn btn-ghost" id="loadRewardsBtn"
                                         onclick="loadRewards()"
                                         {% if twitch_status != 'connected' %}disabled{% endif %}>
-                                    Load
+                                    Load Rewards
                                 </button>
                             </div>
-                            <div class="field-hint">Pick a specific reward to trigger whitelisting, or leave as "Any" to respond to all redemptions.</div>
+                            <div id="reward-picker-list" style="display:none;margin-top:0.5rem;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden"></div>
+                            <div class="field-hint">Connect one or more channel point rewards, each with its own Minecraft gamemode. If none are configured, any redemption whitelists the player (legacy behavior, no gamemode change).</div>
                         </div>
                         <div class="twitch-actions">
                             <button type="button" class="btn btn-twitch" id="authorizeBtn"
@@ -638,7 +640,8 @@
     <script>
         const SECRET_TOKEN  = {{ secret_token | tojson }};
         const TWITCH_STATUS = {{ twitch_status | tojson }};
-        const SAVED_REWARD  = {{ (config.twitch.reward_id if config.twitch is defined else '') | tojson }};
+        const GAMEMODES     = ['survival', 'creative', 'adventure', 'spectator'];
+        let configuredRewards = {{ (config.twitch.rewards if config.twitch is defined else []) | tojson }};
 
         // ── Utilities ────────────────────────────────────────────────────────
         function escapeHtml(s) {
@@ -929,29 +932,94 @@
             btn.textContent = show ? 'Hide' : 'Show';
         }
 
-        // ── Load Twitch rewards ───────────────────────────────────────────────
+        // ── Channel point rewards (configured list + picker) ────────────────────
+        function renderRewardRows() {
+            const container = document.getElementById('reward-rows');
+            container.innerHTML = '';
+            configuredRewards.forEach((r, i) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:0.5rem';
+                const label = document.createElement('span');
+                label.style.cssText = 'flex:1;font-size:0.875rem';
+                label.textContent = r.title || r.reward_id;
+                const select = document.createElement('select');
+                select.style.cssText = 'width:auto;flex:0 0 150px';
+                GAMEMODES.forEach(mode => {
+                    const opt = document.createElement('option');
+                    opt.value = mode;
+                    opt.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+                    if (mode === r.gamemode) opt.selected = true;
+                    select.appendChild(opt);
+                });
+                select.addEventListener('change', () => { configuredRewards[i].gamemode = select.value; });
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-danger';
+                removeBtn.textContent = 'Remove';
+                removeBtn.addEventListener('click', () => {
+                    configuredRewards.splice(i, 1);
+                    renderRewardRows();
+                });
+                row.appendChild(label);
+                row.appendChild(select);
+                row.appendChild(removeBtn);
+                container.appendChild(row);
+            });
+        }
+        renderRewardRows();
+
+        let fetchedRewards = [];
+        function renderRewardPicker() {
+            const label = document.getElementById('reward-picker-label');
+            const list  = document.getElementById('reward-picker-list');
+            const configuredIds = new Set(configuredRewards.map(r => r.reward_id));
+            const available = fetchedRewards.filter(r => !configuredIds.has(r.id));
+            list.innerHTML = '';
+            if (!available.length) {
+                label.textContent = fetchedRewards.length ? 'All rewards already added' : 'No channel point rewards found';
+                list.style.display = 'none';
+                return;
+            }
+            available.forEach((r, i) => {
+                const row = document.createElement('div');
+                const borderBottom = i < available.length - 1 ? '1px solid var(--border)' : 'none';
+                row.style.cssText = `display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.75rem;background:var(--surface);border-bottom:${borderBottom}`;
+                const nameSpan = document.createElement('span');
+                nameSpan.style.cssText = 'flex:1;font-size:0.85rem';
+                nameSpan.textContent = r.title;
+                const addBtn = document.createElement('button');
+                addBtn.type = 'button';
+                addBtn.className = 'btn btn-ghost';
+                addBtn.style.cssText = 'padding:0.2rem 0.6rem;font-size:0.8rem';
+                addBtn.textContent = 'Add';
+                addBtn.addEventListener('click', () => {
+                    configuredRewards.push({ reward_id: r.id, title: r.title, gamemode: 'survival' });
+                    renderRewardRows();
+                    renderRewardPicker();
+                });
+                row.appendChild(nameSpan);
+                row.appendChild(addBtn);
+                list.appendChild(row);
+            });
+            label.textContent = 'Pick a reward to add:';
+            list.style.display = 'block';
+        }
+
         async function loadRewards() {
-            const sel = document.getElementById('s-reward');
             const btn = document.getElementById('loadRewardsBtn');
             if (btn) { btn.disabled = true; btn.textContent = '…'; }
             try {
                 const res  = await fetch('/twitch/rewards');
                 const data = await res.json();
                 if (res.ok && data.rewards) {
-                    sel.innerHTML = '<option value="">── Any redemption ──</option>';
-                    data.rewards.forEach(r => {
-                        const opt = document.createElement('option');
-                        opt.value = r.id; opt.textContent = r.title;
-                        if (r.id === SAVED_REWARD) opt.selected = true;
-                        sel.appendChild(opt);
-                    });
-                    sel.disabled = false;
+                    fetchedRewards = data.rewards;
+                    renderRewardPicker();
                     showToast('Rewards loaded', 'info');
                 } else {
                     showToast(data.message || 'Could not load rewards', 'error');
                 }
             } catch { showToast('Network error', 'error'); }
-            finally { if (btn) { btn.disabled = false; btn.textContent = 'Load'; } }
+            finally { if (btn) { btn.disabled = false; btn.textContent = 'Load Rewards'; } }
         }
 
         // ── Authorize Twitch ──────────────────────────────────────────────────
@@ -1041,7 +1109,9 @@
                     client_id:     document.getElementById('s-twitch-id').value.trim(),
                     client_secret: document.getElementById('s-twitch-secret').value.trim(),
                     channel_name:  document.getElementById('s-twitch-channel').value.trim(),
-                    reward_id:     document.getElementById('s-reward').value,
+                    rewards:       configuredRewards.map(r => ({
+                                       reward_id: r.reward_id, title: r.title, gamemode: r.gamemode,
+                                   })),
                     redirect_uri:  document.getElementById('s-twitch-redirect').value.trim(),
                 },
             };

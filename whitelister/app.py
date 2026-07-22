@@ -9,8 +9,9 @@ from datetime import datetime, timezone
 import yaml
 from flask import Flask, jsonify, redirect, render_template, request
 
-from .amp_client import AMPAuthError, AMPCommandError, AMPClient
+from .amp_client import AMPAuthError, AMPCommandError, AMPClient, GAMEMODES
 from .database import delete_entry, get_all_entries, init_db, upsert_entry
+from .gamemode_watcher import start_gamemode_watcher
 from .scheduler import start_expiry_thread
 from .twitch_client import (
     TwitchEventSubClient,
@@ -21,6 +22,14 @@ from .twitch_client import (
 )
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,16}$")
+
+
+def _build_rewards_map(twitch_cfg: dict) -> dict:
+    return {
+        r["reward_id"]: r.get("gamemode", "survival")
+        for r in twitch_cfg.get("rewards", [])
+        if r.get("reward_id")
+    }
 
 
 def _setup_logging(config: dict) -> None:
@@ -68,7 +77,7 @@ DEFAULT_CONFIG = {
     },
     "twitch": {
         "client_id": "", "client_secret": "", "channel_name": "",
-        "reward_id": "", "access_token": "", "refresh_token": "", "broadcaster_id": "",
+        "rewards": [], "access_token": "", "refresh_token": "", "broadcaster_id": "",
     },
     "database": {"path": "/config/whitelist.db"},
     "logging": {"level": "INFO", "file": ""},
@@ -85,11 +94,30 @@ def create_app(config_path: str = None) -> Flask:
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
+    # One-time migration: legacy single `reward_id` -> `rewards` list. An empty
+    # rewards list preserves today's behavior (any redemption whitelists, no gamemode
+    # change); a non-empty legacy reward_id becomes a single entry. Persisted to disk
+    # immediately so every other route (which re-reads the file fresh) sees the new
+    # schema too, not just this in-memory `config`.
+    twitch_migrating = config.setdefault("twitch", {})
+    legacy_reward_id = twitch_migrating.pop("reward_id", None)
+    if legacy_reward_id is not None:
+        if legacy_reward_id and not twitch_migrating.get("rewards"):
+            twitch_migrating["rewards"] = [
+                {"reward_id": legacy_reward_id, "title": "", "gamemode": "survival"}
+            ]
+        else:
+            twitch_migrating.setdefault("rewards", [])
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
     _setup_logging(config)
     logger = logging.getLogger(__name__)
 
     conn = init_db(config["database"]["path"])
     db_lock = threading.Lock()
+    pending_gamemodes: dict = {}  # username.lower() -> (gamemode, redeemed_at)
+    pending_lock = threading.Lock()
     amp = AMPClient(
         base_url=config["amp"]["url"],
         username=config["amp"]["username"],
@@ -106,13 +134,13 @@ def create_app(config_path: str = None) -> Flask:
     )
 
     # Mutable container so nested functions can reassign the client reference
-    twitch_state = {"client": None}
+    twitch_state = {"client": None, "gamemode_watcher_started": False}
 
     app = Flask(__name__)
 
     # ── Shared helpers ───────────────────────────────────────────────────────
 
-    def _whitelist_player(username: str) -> bool:
+    def _whitelist_player(username: str, gamemode: str = None) -> bool:
         if not USERNAME_RE.match(username):
             logger.warning("Ignored invalid username from Twitch: %r", username)
             return False
@@ -127,6 +155,11 @@ def create_app(config_path: str = None) -> Flask:
             upsert_entry(conn, username, now, expires_at)
         dt = datetime.fromtimestamp(expires_at, tz=timezone.utc)
         logger.info("Whitelisted %s via Twitch until %s", username, dt.isoformat())
+        if gamemode:
+            # Can't apply /gamemode yet — the player was just whitelisted and can't be
+            # online. Queue it; the gamemode watcher applies it once they actually join.
+            with pending_lock:
+                pending_gamemodes[username.lower()] = (gamemode, now)
         return True
 
     def _save_twitch_tokens(access_token: str, refresh_token: str) -> None:
@@ -148,13 +181,16 @@ def create_app(config_path: str = None) -> Flask:
             access_token=twitch_cfg["access_token"],
             refresh_token=twitch_cfg["refresh_token"],
             broadcaster_id=twitch_cfg["broadcaster_id"],
-            reward_id=twitch_cfg.get("reward_id", ""),
+            rewards=_build_rewards_map(twitch_cfg),
             on_redemption=_whitelist_player,
             on_token_refresh=_save_twitch_tokens,
         )
         client.start()
         twitch_state["client"] = client
         logger.info("Twitch EventSub client started")
+        if not twitch_state["gamemode_watcher_started"]:
+            start_gamemode_watcher(amp, pending_gamemodes, pending_lock, duration)
+            twitch_state["gamemode_watcher_started"] = True
 
     def _twitch_redirect_uri() -> str:
         return request.url_root.rstrip("/") + "/twitch/callback"
@@ -290,12 +326,22 @@ def create_app(config_path: str = None) -> Flask:
         # Twitch: only update user-visible fields; preserve auth tokens
         if "twitch" in data:
             existing.setdefault("twitch", {})
-            for field in ("client_id", "client_secret", "channel_name", "reward_id", "redirect_uri"):
+            for field in ("client_id", "client_secret", "channel_name", "redirect_uri"):
                 if field in data["twitch"]:
                     existing["twitch"][field] = data["twitch"][field]
+            if "rewards" in data["twitch"]:
+                rewards = data["twitch"]["rewards"]
+                if not isinstance(rewards, list):
+                    return jsonify({"status": "error", "message": "rewards must be a list"}), 400
+                for r in rewards:
+                    if not isinstance(r, dict) or not r.get("reward_id"):
+                        return jsonify({"status": "error", "message": "each reward needs a reward_id"}), 400
+                    if r.get("gamemode") not in GAMEMODES:
+                        return jsonify({"status": "error", "message": f"invalid gamemode: {r.get('gamemode')!r}"}), 400
+                existing["twitch"]["rewards"] = rewards
             if twitch_state["client"]:
-                twitch_state["client"].set_reward_id(
-                    data["twitch"].get("reward_id", ""))
+                twitch_state["client"].set_rewards(
+                    _build_rewards_map(existing["twitch"]))
 
         with open(config_path, "w") as f:
             yaml.dump(existing, f, default_flow_style=False, allow_unicode=True)
@@ -476,7 +522,7 @@ if (window.opener) {{
         return jsonify({
             "status": client.status if client else "disconnected",
             "channel_name": twitch_cfg.get("channel_name", ""),
-            "reward_id": twitch_cfg.get("reward_id", ""),
+            "rewards": twitch_cfg.get("rewards", []),
         })
 
     @app.route("/twitch/rewards")
