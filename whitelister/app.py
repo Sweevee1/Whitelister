@@ -10,8 +10,8 @@ import yaml
 from flask import Flask, jsonify, redirect, render_template, request
 
 from .amp_client import AMPAuthError, AMPCommandError, AMPClient, GAMEMODES
+from .amp_console_watcher import start_console_watcher
 from .database import delete_entry, get_all_entries, init_db, upsert_entry
-from .gamemode_watcher import start_gamemode_watcher
 from .scheduler import start_expiry_thread
 from .twitch_client import (
     TwitchEventSubClient,
@@ -118,6 +118,8 @@ def create_app(config_path: str = None) -> Flask:
     db_lock = threading.Lock()
     pending_gamemodes: dict = {}  # username.lower() -> (gamemode, redeemed_at)
     pending_lock = threading.Lock()
+    whitelist_cache: list = []  # names on AMP's actual whitelist, refreshed by the console watcher
+    whitelist_cache_lock = threading.Lock()
     amp = AMPClient(
         base_url=config["amp"]["url"],
         username=config["amp"]["username"],
@@ -129,16 +131,23 @@ def create_app(config_path: str = None) -> Flask:
 
     if config["amp"].get("url") and config["amp"].get("password"):
         _restore_whitelist(conn, amp, db_lock)
+        start_console_watcher(amp, pending_gamemodes, pending_lock, duration,
+                               whitelist_cache, whitelist_cache_lock)
     start_expiry_thread(
         conn, amp, db_lock, int(config["service"]["expiry_check_interval_seconds"])
     )
 
     # Mutable container so nested functions can reassign the client reference
-    twitch_state = {"client": None, "gamemode_watcher_started": False}
+    twitch_state = {"client": None}
 
     app = Flask(__name__)
 
     # ── Shared helpers ───────────────────────────────────────────────────────
+
+    def _permanent_players(tracked_lower: set) -> list:
+        with whitelist_cache_lock:
+            cached = list(whitelist_cache)
+        return [name for name in cached if name.lower() not in tracked_lower]
 
     def _whitelist_player(username: str, gamemode: str = None) -> bool:
         if not USERNAME_RE.match(username):
@@ -188,9 +197,6 @@ def create_app(config_path: str = None) -> Flask:
         client.start()
         twitch_state["client"] = client
         logger.info("Twitch EventSub client started")
-        if not twitch_state["gamemode_watcher_started"]:
-            start_gamemode_watcher(amp, pending_gamemodes, pending_lock, duration)
-            twitch_state["gamemode_watcher_started"] = True
 
     def _twitch_redirect_uri() -> str:
         return request.url_root.rstrip("/") + "/twitch/callback"
@@ -212,6 +218,7 @@ def create_app(config_path: str = None) -> Flask:
         with db_lock:
             entries = get_all_entries(conn)
         players = []
+        tracked_lower = {username.lower() for username, _, _ in entries}
         for username, added_at, expires_at in entries:
             if expires_at > now:
                 dt = datetime.fromtimestamp(expires_at, tz=timezone.utc)
@@ -221,6 +228,7 @@ def create_app(config_path: str = None) -> Flask:
                     "expires_str": f"{dt.hour}:{dt.minute:02d} UTC",
                 })
         players.sort(key=lambda p: p["expires_at"])
+        permanent_players = _permanent_players(tracked_lower)
 
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
@@ -231,6 +239,7 @@ def create_app(config_path: str = None) -> Flask:
         return render_template(
             "index.html",
             players=players,
+            permanent_players=permanent_players,
             duration_hours=duration // 3600,
             config=cfg,
             secret_token=secret_token,
@@ -357,6 +366,7 @@ def create_app(config_path: str = None) -> Flask:
         with db_lock:
             entries = get_all_entries(conn)
         players = []
+        tracked_lower = {username.lower() for username, _, _ in entries}
         for username, _, expires_at in entries:
             if expires_at > now:
                 dt = datetime.fromtimestamp(expires_at, tz=timezone.utc)
@@ -366,7 +376,8 @@ def create_app(config_path: str = None) -> Flask:
                     "expires_str": f"{dt.hour}:{dt.minute:02d} UTC",
                 })
         players.sort(key=lambda p: p["expires_at"])
-        return jsonify({"players": players})
+        permanent_players = _permanent_players(tracked_lower)
+        return jsonify({"players": players, "permanent_players": permanent_players})
 
     @app.route("/whitelist", methods=["POST"])
     def add_to_whitelist():

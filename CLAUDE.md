@@ -43,9 +43,10 @@ A self-signed TLS cert is generated on first boot and stored in `/config/cert.pe
 
 All shared state lives in `create_app()` in `app.py` and is passed explicitly — no module-level globals.
 
-**Concurrent writers share three locks:**
+**Concurrent writers share four locks:**
 - `db_lock: threading.Lock` — serialises all SQLite writes (request handler + expiry thread).
-- `pending_lock: threading.Lock` — guards the in-memory `pending_gamemodes` dict (username → `(gamemode, redeemed_at)`) shared between `_whitelist_player()` and the gamemode watcher thread.
+- `pending_lock: threading.Lock` — guards the in-memory `pending_gamemodes` dict (username → `(gamemode, redeemed_at)`) shared between `_whitelist_player()` and the AMP console watcher thread.
+- `whitelist_cache_lock: threading.Lock` — guards `whitelist_cache` (list of usernames on AMP's actual Minecraft whitelist), written by the console watcher thread and read by `GET /whitelist`/the dashboard.
 - `AMPClient._lock: threading.Lock` — serialises AMP session refresh only.
 
 **Request flow:** `POST /whitelist` → validate username regex → `AMPClient.whitelist_add()` → `upsert_entry()` in SQLite → return JSON. Accepts optional `duration_seconds` body field to override the config default for that specific add.
@@ -54,7 +55,11 @@ All shared state lives in `create_app()` in `app.py` and is passed explicitly �
 
 **Twitch flow:** `TwitchEventSubClient` background thread (in `twitch_client.py`) maintains a WebSocket connection to Twitch EventSub, subscribed broadcaster-wide (Twitch's `condition` has no server-side reward filter). On any channel points redemption it looks up the reward id in its `rewards: dict[reward_id, gamemode]` map — matching against a specific set only if the map is non-empty — and calls `_whitelist_player(username, gamemode)`, the same helper used by the HTTP endpoint.
 
-**Gamemode-on-join flow:** a player can never be online at the moment they redeem (redemption is what grants them whitelist access), so `/gamemode` can't be applied synchronously. Instead `gamemode_watcher.py` runs a daemon thread (`GAMEMODE_POLL_INTERVAL_SECONDS = 5`, independent of the expiry cadence) that polls `AMPClient.get_console_updates()` (AMP's `Core/GetUpdates`) for the standard Minecraft `"<name> joined the game"` log line. When a joining player matches an entry in `pending_gamemodes`, it calls `AMPClient.set_gamemode()` and clears the entry. Stale entries (never joined before `whitelist_duration_seconds` elapses) are purged each tick. This thread only starts once the Twitch client starts, since pending gamemodes only originate from Twitch redemptions.
+**AMP console watcher (`amp_console_watcher.py`):** a single daemon thread owns **all** polling of `AMPClient.get_console_updates()` (AMP's `Core/GetUpdates`) — it's a since-last-poll cursor tied to the AMP session, not per-caller, so a second concurrent poller (e.g. a Flask request handler) would race this thread for the same console entries and silently drop data. It serves two purposes on independent cadences within one loop:
+- **Gamemode-on-join** (every `POLL_INTERVAL_SECONDS = 5`): a player can never be online at the moment they redeem (redemption is what grants them whitelist access), so `/gamemode` can't be applied synchronously. Instead it's queued in `pending_gamemodes`, and the watcher scans console entries for the standard Minecraft `"<name> joined the game"` log line; on a match it calls `AMPClient.set_gamemode()` and clears the entry. Stale entries (never joined before `whitelist_duration_seconds` elapses) are purged each tick.
+- **Whitelist cache** (every `WHITELIST_REFRESH_INTERVAL_SECONDS = 60`): sends `whitelist list` via `send_console_command()`, then parses the console response (`"There are N whitelisted player(s): ..."`, confirmed live against a real AMP instance) into `whitelist_cache` — the full list of names on AMP's actual Minecraft whitelist, independent of what this app's SQLite DB tracks.
+
+This thread starts unconditionally whenever AMP is configured (same condition as `_restore_whitelist`), not gated on Twitch — the whitelist cache is useful with or without Twitch integration.
 
 **Expiry flow:** daemon thread wakes every N seconds → `get_expired_entries()` → `AMPClient.whitelist_remove()` per entry → `delete_entry()`. Failed removals stay in DB and are retried next cycle.
 
@@ -67,7 +72,7 @@ All shared state lives in `create_app()` in `app.py` and is passed explicitly �
 - `twitch_client.py` — Twitch EventSub WebSocket client, OAuth helpers (`build_auth_url`, `exchange_code`, `get_broadcaster_id`, `get_rewards`)
 - `database.py` — SQLite with WAL mode; `upsert_entry`, `get_expired_entries`, `delete_entry`, `get_all_entries`
 - `scheduler.py` — background expiry thread
-- `gamemode_watcher.py` — background thread that polls AMP console output for player joins and applies queued gamemodes (see "Gamemode-on-join flow" above)
+- `amp_console_watcher.py` — background thread that owns all AMP console polling: applies queued gamemodes on player join, and refreshes the permanent-whitelist cache (see "AMP console watcher" above)
 - `proxy.py` — dual-protocol TCP proxy on port 8765; sniffs first byte to distinguish TLS from plain HTTP
 
 ## AMP API
@@ -102,7 +107,7 @@ Uses EventSub WebSocket transport — no public HTTPS endpoint required.
 
 **Token refresh.** The client auto-reconnects with exponential backoff and refreshes tokens on 401.
 
-`twitch.rewards` in config is a list of `{reward_id, title, gamemode}` — connect one or more channel point rewards, each triggering a different Minecraft gamemode (`survival`/`creative`/`adventure`/`spectator`) on redemption. Leave the list empty to respond to all redemptions with no gamemode change (legacy behavior). Managed via the dashboard's Settings → Twitch Integration → Channel Point Rewards section (a "Load Rewards" picker + per-row remove, modeled on the AMP Instance picker). A legacy single `reward_id` string from older configs is migrated in-place on startup into a single-entry `rewards` list.
+`twitch.rewards` in config is a list of `{reward_id, title, gamemode}` — connect one or more channel point rewards, each triggering a different Minecraft gamemode (`survival`/`creative`/`adventure`/`spectator`) on redemption. Leave the list empty to respond to all redemptions with no gamemode change (legacy behavior). Managed via the dashboard's Settings → **Channel Point Rewards** section (its own top-level section, not nested under Twitch Integration) — a "Load Rewards" dropdown + Add button, plus per-row gamemode select and remove. A legacy single `reward_id` string from older configs is migrated in-place on startup into a single-entry `rewards` list.
 
 ## Dashboard routes
 
@@ -110,7 +115,7 @@ Uses EventSub WebSocket transport — no public HTTPS endpoint required.
 |--------|------|---------|
 | GET | `/` | Web dashboard |
 | GET | `/health` | Liveness check |
-| GET | `/whitelist` | List active players as JSON `{players: [{username, expires_at, expires_str}]}` |
+| GET | `/whitelist` | List active players as JSON `{players: [{username, expires_at, expires_str}], permanent_players: [username, ...]}` — `permanent_players` is `whitelist_cache` minus usernames tracked in the DB (case-insensitive) |
 | POST | `/whitelist` | Add player; optional `duration_seconds` body field overrides config default |
 | DELETE | `/whitelist/<username>` | Remove player |
 | GET | `/settings` | Get current config (minus auth tokens) |
@@ -125,11 +130,13 @@ Uses EventSub WebSocket transport — no public HTTPS endpoint required.
 
 ## Dashboard UI
 
-Single-file template at `whitelister/templates/index.html`. Dark grey theme (`--bg: #dde3ea`, `--surface: #eaeff4`). All CSS variables are in the `:root` block at the top of the file.
+Single-file template at `whitelister/templates/index.html`. Light theme by default (`--bg: #dde3ea`, `--surface: #eaeff4`); a `@media (prefers-color-scheme: dark)` block overrides the same `:root` custom properties for dark mode (follows OS/browser preference automatically, no manual toggle). All CSS variables are in the `:root` block at the top of the file — since nearly every rule references `var(--x)`, the dark override cascades through the whole page with no per-component changes needed.
 
-**Players panel** — username input + separate hours/minutes number fields + "Add" button. The duration fields default to the config value and are sent as `duration_seconds` in the POST body. The panel polls `GET /whitelist` every 8 seconds while the Players tab is active — no page reload needed.
+**Header** — shows two small connection-status icons (`#ampConnIcon`, `#twitchConnIcon`), each a circular badge with a colored `.conn-dot` overlay (green connected / red error-disconnected / amber reconnecting-checking), updated by `checkAmpStatus()`/`checkTwitchStatus()` on an always-on 8s interval regardless of active tab (there's no channel-name pill anymore — just at-a-glance status).
 
-**Settings panel** — Whitelist Duration is split into separate `h` and `m` inputs (`s-duration-h`, `s-duration-m`). The settings form has `autocomplete="off"` to suppress browser HTTP password-autofill warnings. Settings save hot-reloads AMPClient via `amp.reconfigure()` — interval and logging changes still require a restart.
+**Players panel** — username input + separate hours/minutes number fields + "Add" button. The duration fields default to the config value and are sent as `duration_seconds` in the POST body. The panel polls `GET /whitelist` every 8 seconds while the Players tab is active — no page reload needed. Below the guest/temporary player list is a second block, "Permanently Whitelisted", rendering `permanent_players` from the same `/whitelist` response — usernames on AMP's real Minecraft whitelist that aren't tracked by this app (added directly via console/AMP by the streamer). Both blocks share the same `removePlayer()` / `DELETE /whitelist/<username>` flow.
+
+**Settings panel** — Whitelist Duration is split into separate `h` and `m` inputs (`s-duration-h`, `s-duration-m`). The settings form has `autocomplete="off"` to suppress browser HTTP password-autofill warnings. Settings save hot-reloads AMPClient via `amp.reconfigure()` — interval and logging changes still require a restart. "Channel Point Rewards" is its own top-level section (not nested under Twitch Integration) — a dropdown (`#reward-picker-select`) populated by **Load Rewards** plus an **Add** button, rather than a list of per-row "Add" buttons, to keep the picker compact.
 
 **AMP Connection section** — has a **Load** button that calls `GET /amp/instances` and renders a picker. Clicking **Use** next to an instance writes its GUID into the hidden `s-amp-instance` input (the ADS proxy approach). The AMP URL field stays unchanged.
 
